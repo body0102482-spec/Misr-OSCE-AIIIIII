@@ -27,6 +27,8 @@ export const HistoryTab: React.FC = () => {
   
   const [inputText, setInputText] = useState("");
   const [isTyping, setIsTyping] = useState(false);
+  const [sessionQuestions, setSessionQuestions] = useState<any[]>([]);
+  const [askedCount, setAskedCount] = useState<number>(0);
   const patientScrollRef = useRef<HTMLDivElement>(null);
   const examinerScrollRef = useRef<HTMLDivElement>(null);
   const streamIntervalRef = useRef<any>(null);
@@ -240,49 +242,66 @@ export const HistoryTab: React.FC = () => {
   };
 
   const resetQuestions = () => {
-    setCurrentQuestionId(null);
-    useStore.setState({ askedQuestionIds: [], currentQuestionId: null });
+    if (!currentCase) return;
+
+    const allBank = currentCase.examinerQuestions || [];
+    if (allBank.length === 0) return;
+
+    const shuffled = [...allBank].sort(() => 0.5 - Math.random());
+    const selected = shuffled.slice(0, 5);
+
+    setSessionQuestions(selected);
+    setAskedCount(0);
+
+    localStorage.setItem(`osce-questions-5-${currentCase.id}`, JSON.stringify(selected));
+    localStorage.setItem(`osce-asked-count-${currentCase.id}`, "0");
+
+    if (selected[0]) {
+      setCurrentQuestionId(selected[0].id);
+      useStore.setState({ askedQuestionIds: [selected[0].id] });
+    } else {
+      setCurrentQuestionId(null);
+      useStore.setState({ askedQuestionIds: [] });
+    }
+
+    if (selected[0]) {
+      const firstMsg: Message = {
+        role: "examiner",
+        content: `🔄 [إعادة تعيين] تم اختيار 5 أسئلة عشوائية جديدة لهذه المحاولة:\n\n[Examiner Question 1/5]: ${selected[0].question}`,
+        timestamp: Date.now()
+      };
+      addExaminerMessage(firstMsg);
+    }
   };
 
   const triggerNextQuestion = () => {
-    if (!currentCase || !currentCase.examinerQuestions) return;
+    if (!currentCase || sessionQuestions.length === 0) return;
 
-    const unasked = currentCase.examinerQuestions.filter(
-      (q) => !askedQuestionIds.includes(q.id)
-    );
+    if (askedCount < 4) {
+      const nextIndex = askedCount + 1;
+      setAskedCount(nextIndex);
+      localStorage.setItem(`osce-asked-count-${currentCase.id}`, String(nextIndex));
 
-    let nextQ;
-    if (unasked.length === 0) {
-      const startOver = window.confirm(
-        "لقد أجبت على كافة أسئلة الملف المتاحة!\nهل ترغب في إعادة تصفير أسئلة الملف للبدء مرة أخرى بتحديد عشوائي؟\n\n(All case-file questions have been answered! Reset to start again?)"
-      );
-      if (startOver) {
-        resetQuestions();
-        const firstRandom = currentCase.examinerQuestions[Math.floor(Math.random() * currentCase.examinerQuestions.length)];
-        nextQ = firstRandom;
-      } else {
-        return;
+      const nextQ = sessionQuestions[nextIndex];
+      if (nextQ) {
+        setCurrentQuestionId(nextQ.id);
+        addAskedQuestionId(nextQ.id);
+
+        const questionText = `[Examiner Question ${nextIndex + 1}/5]: ${nextQ.question}`;
+        const examinerMessageObj: Message = {
+          role: "examiner",
+          content: questionText,
+          timestamp: Date.now(),
+        };
+        addExaminerMessage(examinerMessageObj);
       }
     } else {
-      const randomIndex = Math.floor(Math.random() * unasked.length);
-      nextQ = unasked[randomIndex];
-    }
-
-    if (nextQ) {
-      setCurrentQuestionId(nextQ.id);
-      addAskedQuestionId(nextQ.id);
-
-      const isFirst = askedQuestionIds.length <= 1;
-      const questionText = isFirst 
-        ? nextQ.question 
-        : `Alright, now: ${nextQ.question}`;
-
-      const examinerMessageObj: Message = {
+      const finishMsg: Message = {
         role: "examiner",
-        content: questionText,
-        timestamp: Date.now(),
+        content: `🏁 لقد أكملت جميع الأسئلة الخمسة (5/5) المخصصة لهذه المحاولة بنجاح! يمكنك مراجعة لوحة التقييم والنتائج أو الضغط على زر إعادة التعيين (Reset) لخوض محاولة جديدة بأسئلة عشوائية أخرى.`,
+        timestamp: Date.now()
       };
-      addExaminerMessage(examinerMessageObj);
+      addExaminerMessage(finishMsg);
     }
   };
 
@@ -318,17 +337,68 @@ export const HistoryTab: React.FC = () => {
     }
   }, [examinerMessages]);
 
-  // Proactive Examiner: If messages are empty, give an intro
+  // Load or generate 5 random questions for the active case
   useEffect(() => {
-    if (examinerMessages.length === 0 && currentCase) {
+    if (!currentCase) return;
+
+    // 1. Setup/Load the 5 questions
+    const cached = localStorage.getItem(`osce-questions-5-${currentCase.id}`);
+    const cachedCount = localStorage.getItem(`osce-asked-count-${currentCase.id}`);
+
+    let selected: any[] = [];
+    let count = 0;
+
+    if (cached) {
+      try {
+        selected = JSON.parse(cached);
+        count = cachedCount ? parseInt(cachedCount, 10) : 0;
+        setSessionQuestions(selected);
+        setAskedCount(count);
+        if (selected[count]) {
+          setCurrentQuestionId(selected[count].id);
+        }
+      } catch (e) {
+        console.error("Error reading cached questions:", e);
+      }
+    } else {
+      // Generate new of 5
+      const allQuestions = currentCase.examinerQuestions || [];
+      if (allQuestions.length > 0) {
+        const shuffled = [...allQuestions].sort(() => 0.5 - Math.random());
+        selected = shuffled.slice(0, 5);
+        setSessionQuestions(selected);
+        setAskedCount(0);
+        localStorage.setItem(`osce-questions-5-${currentCase.id}`, JSON.stringify(selected));
+        localStorage.setItem(`osce-asked-count-${currentCase.id}`, "0");
+        if (selected[0]) {
+          setCurrentQuestionId(selected[0].id);
+          useStore.setState({ askedQuestionIds: [selected[0].id] });
+        }
+      }
+    }
+
+    // 2. Proactive message handling: Intro & first question
+    const currentExMessages = useStore.getState().examinerMessages;
+    if (currentExMessages.length === 0) {
       const intro: Message = {
         role: "examiner",
-        content: `I am the lead examiner for this station. You are presented with a ${currentCase.patient.age}-year-old ${currentCase.patient.gender} with ${currentCase.patient.chiefComplaint}. Please proceed with history taking and be prepared to explain your logic at any moment.`,
+        content: `I am the lead examiner for this station. You are presented with a ${currentCase.patient.age}-year-old ${currentCase.patient.gender} with ${currentCase.patient.chiefComplaint}.\n\nLet's start your oral evaluation (viva).` + 
+                 ((selected.length > 0) ? "\n\nI will ask you 5 randomized board questions regarding this case. Please provide detailed clinical explanations." : ""),
+        timestamp: Date.now() - 100,
+      };
+
+      const firstQText = selected[0]?.question;
+      const firstMsg: Message = {
+        role: "examiner",
+        content: firstQText ? `[Examiner Question 1/5]: ${firstQText}` : "No questions in the files.",
         timestamp: Date.now(),
       };
-      addExaminerMessage(intro);
+
+      useStore.setState({
+        examinerMessages: [intro, firstMsg]
+      });
     }
-  }, [currentCase, examinerMessages.length]);
+  }, [currentCase]);
 
   const handleSendMessage = async (text: string) => {
     if (!text.trim() || isTyping) return;
@@ -434,250 +504,334 @@ export const HistoryTab: React.FC = () => {
 
   return (
     <div className="flex flex-col h-full bg-slate-50/50 overflow-hidden min-h-0">
-      {/* Dual Chat Area */}
-      <div className="flex-1 overflow-hidden relative min-h-0">
-        <div className="flex h-full w-full overflow-hidden min-h-0">
-          {/* Patient Chat */}
-          <div className={`${chatTarget === "patient" ? "flex" : "hidden lg:flex"} flex-col flex-1 border-r border-slate-200/60 h-full overflow-hidden bg-white min-h-0`}>
-            <div className="p-4 bg-white/60 backdrop-blur-sm border-b border-slate-100 flex items-center justify-between shrink-0">
-               <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white shadow-sm">
-                     <User size={16} />
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="text-[10px] font-black text-slate-800 uppercase tracking-widest leading-none">Patient Interview</span>
-                    <span className="text-[8px] font-bold text-slate-400 uppercase mt-0.5">{currentCase?.patient.name}</span>
-                  </div>
+      
+      {/* Top Tab Bar Switcher (Centered & Large) */}
+      <div className="bg-white border-b border-slate-200/80 p-3 sm:p-4 shrink-0 shadow-sm z-10 w-full">
+         <div className="max-w-4xl mx-auto flex gap-3">
+           <button
+             type="button"
+             onClick={() => setChatTarget("patient")}
+             className={`flex-1 flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-3 py-2.5 px-4 rounded-2xl border transition-all duration-200 cursor-pointer ${
+               chatTarget === "patient"
+                 ? "bg-blue-50/60 border-blue-200 text-blue-700 shadow-xs ring-1 ring-blue-100"
+                 : "bg-slate-55 border-slate-200 text-slate-500 hover:bg-slate-100/80 hover:text-slate-700"
+             }`}
+           >
+             <div className={`p-1.5 rounded-xl transition-colors shrink-0 ${
+               chatTarget === "patient" ? "bg-blue-600 text-white" : "bg-slate-200 text-slate-600"
+             }`}>
+               <User size={20} className="sm:w-[22px] sm:h-[22px]" strokeWidth={2.2} />
+             </div>
+             <div className="text-center sm:text-left min-w-0">
+               <div className="text-[11px] font-black tracking-wide uppercase leading-tight truncate">
+                 Patient Encounter (طيف المريض)
                </div>
-               <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            </div>
-            
-            <div 
-              ref={patientScrollRef}
-              onScroll={handlePatientScroll}
-              className="flex-1 overflow-y-auto min-h-0 p-4 md:p-6 space-y-4 md:space-y-6 scroll-smooth bg-slate-50/30 pb-[120px] lg:pb-6"
-            >
-              {messages.length === 0 && (
-                <div className="text-center py-12 flex flex-col items-center">
-                  <div className="bg-white p-4 rounded-2xl shadow-lg shadow-slate-200/50 mb-4 border border-slate-100 flex items-center justify-center text-blue-600">
-                    <User size={32} strokeWidth={1.5} />
-                  </div>
-                  <h3 className="text-lg font-black text-slate-800 tracking-tight mb-1">Simulated Interview</h3>
-                  <p className="text-slate-500 text-[11px] font-medium max-w-xs leading-relaxed">
-                    Start the clinical encounter by introducing yourself to the patient.
-                  </p>
-                </div>
-              )}
-
-              {messages.map((msg, i) => (
-                <motion.div
-                  key={i}
-                  initial={{ opacity: 0, y: 10, scale: 0.98 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  className={`flex ${msg.role === "student" ? "justify-end" : "justify-start"}`}
-                >
-                  <div className={`max-w-[85%] rounded-[1.5rem] p-4 shadow-sm border transition-all ${
-                    msg.role === "student" 
-                      ? "bg-blue-600 text-white border-blue-500 rounded-tr-none shadow-blue-200/50 shadow-lg" 
-                      : "bg-white text-slate-700 border-slate-200 rounded-tl-none shadow-slate-100"
-                  }`}>
-                    <p className="text-sm leading-relaxed font-medium">{msg.content}</p>
-                  </div>
-                </motion.div>
-              ))}
-
-              {isTyping && chatTarget === "patient" && (
-                <div className="flex justify-start">
-                  <div className="bg-white border border-slate-200 rounded-2xl rounded-tl-none p-4 shadow-sm flex items-center gap-1.5 px-4">
-                    <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
-                    <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
-                    <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce"></span>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Examiner Chat */}
-          <div className={`${chatTarget === "examiner" ? "flex" : "hidden lg:flex"} flex-col flex-1 bg-slate-100/30 h-full overflow-hidden min-h-0`}>
-            <div className="p-4 bg-slate-900 border-b border-slate-800 flex items-center justify-between shrink-0">
-               <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 bg-slate-800 rounded-lg flex items-center justify-center text-blue-400 shadow-sm border border-slate-700">
-                     <Shield size={16} />
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="text-[10px] font-black text-white uppercase tracking-widest leading-none">Examiner Observation</span>
-                    <span className="text-[8px] font-bold text-blue-400 uppercase mt-0.5">Live Assessment</span>
-                  </div>
+               <div className="text-[10px] font-bold opacity-70 leading-none mt-1 truncate">
+                 {currentCase?.patient?.name || "Patient"} ({currentCase?.patient?.age || "?"} y/o)
                </div>
-               <span className="text-[8px] font-black text-blue-400 uppercase border border-blue-400/30 px-1.5 py-0.5 rounded">MUST University</span>
-            </div>
+             </div>
+           </button>
 
-            {/* Examiner control panel for file-based questions */}
-            <div className="mx-4 my-3 p-4 bg-slate-950/5 backdrop-blur border border-slate-200/60 rounded-2xl flex flex-col gap-3 shrink-0">
-              <div className="flex justify-between items-center">
-                <span className="text-[10px] font-black text-slate-800 tracking-tight flex items-center gap-1.5 uppercase font-mono">
-                  <div className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse"></div>
-                  File Questions (أسئلة بنك الملف)
-                </span>
-                <span className="text-[9px] bg-slate-200 text-slate-700 font-extrabold px-2 py-0.5 rounded-full uppercase">
-                  {askedQuestionIds?.length || 0} / {currentCase?.examinerQuestions?.length || 0} Asked
-                </span>
+           <button
+             type="button"
+             onClick={() => setChatTarget("examiner")}
+             className={`flex-1 flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-3 py-2.5 px-4 rounded-2xl border transition-all duration-200 cursor-pointer ${
+               chatTarget === "examiner"
+                 ? "bg-slate-900 border-slate-950 text-white shadow-md shadow-slate-900/10"
+                 : "bg-slate-55 border-slate-200 text-slate-500 hover:bg-slate-100/80 hover:text-slate-700"
+             }`}
+           >
+             <div className={`p-1.5 rounded-xl transition-colors shrink-0 ${
+               chatTarget === "examiner" ? "bg-slate-800 text-blue-400" : "bg-slate-200 text-slate-600"
+             }`}>
+               <Shield size={20} className="sm:w-[22px] sm:h-[22px]" strokeWidth={2.2} />
+             </div>
+             <div className="text-center sm:text-left min-w-0">
+               <div className="text-[11px] font-black tracking-wide uppercase leading-tight truncate">
+                 Examiner Box (الممتحن والملف)
+               </div>
+               <div className="text-[10px] font-bold opacity-75 leading-none mt-1 truncate">
+                 VIVA & Active Questions
+               </div>
+             </div>
+           </button>
+         </div>
+      </div>
+
+      {/* Single Shared Chat Box Container */}
+      <div className="flex-1 overflow-hidden relative min-h-0 bg-white">
+        <div className="max-w-4xl mx-auto h-full flex flex-col overflow-hidden">
+          
+          {chatTarget === "patient" ? (
+            /* Patient Interview Chat */
+            <div className="flex flex-col flex-1 h-full overflow-hidden min-h-0">
+              <div className="p-3 bg-white border-b border-slate-100 flex items-center justify-between shrink-0">
+                 <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Interview Log: {currentCase?.patient?.name}</span>
+                 </div>
+                 <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
               </div>
-
-              {currentQuestionId ? (() => {
-                const activeQ = currentCase?.examinerQuestions?.find(q => q.id === currentQuestionId);
-                return (
-                  <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 flex flex-col gap-1.5">
-                    <span className="text-[9px] font-black text-amber-600 uppercase tracking-widest leading-none">
-                      Active Board Question (السؤال النشط):
-                    </span>
-                    <p className="text-xs text-slate-800 font-semibold leading-relaxed font-sans">
-                      {activeQ?.question}
+              
+              <div 
+                ref={patientScrollRef}
+                onScroll={handlePatientScroll}
+                className="flex-1 overflow-y-auto min-h-0 p-4 md:p-6 space-y-4 md:space-y-6 scroll-smooth bg-slate-50/20 pb-[120px] lg:pb-6"
+              >
+                {messages.length === 0 && (
+                  <div className="text-center py-12 flex flex-col items-center">
+                    <div className="bg-white p-4 rounded-2xl shadow-md border border-slate-100 flex items-center justify-center text-blue-600 mb-3">
+                      <User size={28} strokeWidth={1.5} />
+                    </div>
+                    <h3 className="text-sm font-black text-slate-800 tracking-tight mb-1">Simulated Interview</h3>
+                    <p className="text-slate-500 text-[10px] font-medium max-w-xs leading-relaxed">
+                      Start the clinical encounter by introducing yourself to the patient.
                     </p>
                   </div>
-                );
-              })() : (
-                <div className="bg-white border border-slate-100 rounded-xl p-3 text-center">
-                  <p className="text-[10px] text-slate-500 font-semibold">
-                    No active question. Ask the Examiner to pose a question!
-                  </p>
+                )}
+
+                {messages.map((msg, i) => (
+                  <motion.div
+                    key={i}
+                    initial={{ opacity: 0, y: 10, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    className={`flex ${msg.role === "student" ? "justify-end" : "justify-start"}`}
+                  >
+                    <div className={`max-w-[85%] rounded-[1.5rem] p-4 shadow-sm border transition-all ${
+                      msg.role === "student" 
+                        ? "bg-blue-600 text-white border-blue-500 rounded-tr-none shadow-blue-200/50 shadow-md" 
+                        : "bg-slate-50 text-slate-700 border-slate-200 rounded-tl-none"
+                    }`}>
+                      <p className="text-sm leading-relaxed font-medium">{msg.content}</p>
+                    </div>
+                  </motion.div>
+                ))}
+
+                {isTyping && chatTarget === "patient" && (
+                  <div className="flex justify-start">
+                    <div className="bg-slate-100 border border-slate-200 rounded-2xl rounded-tl-none p-3 shadow-sm flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
+                      <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
+                      <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce"></span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            /* Examiner Assessment Chat */
+            <div className="flex flex-col flex-1 h-full overflow-hidden min-h-0 bg-slate-50/30">
+              <div className="p-3 bg-slate-900 border-b border-slate-800 flex items-center justify-between shrink-0">
+                 <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 bg-slate-800 rounded-md flex items-center justify-center text-blue-400 border border-slate-700">
+                       <Shield size={12} />
+                    </div>
+                    <span className="text-[10px] font-black text-white uppercase tracking-widest leading-none">Examiner Board</span>
+                 </div>
+                 
+                 <div className="flex items-center gap-1.5">
+                    {/* Compact "Ask From File" button */}
+                    <button
+                      type="button"
+                      onClick={() => triggerNextQuestion()}
+                      disabled={!currentCase?.examinerQuestions || currentCase.examinerQuestions.length === 0}
+                      className="bg-amber-500 hover:bg-amber-600 disabled:opacity-40 text-slate-950 font-black text-[9px] py-1 px-2.5 rounded-lg cursor-pointer transition-all flex items-center gap-1 shadow-sm active:scale-95 border-none"
+                      title="Ask a question from File"
+                    >
+                      <BookOpen size={10} />
+                      <span>{askedCount < 4 ? `Question ${askedCount + 1}/5` : "Completed 5/5"}</span>
+                    </button>
+
+                    {/* Upload Custom Bank button */}
+                    <button
+                      type="button"
+                      onClick={() => setShowImport(!showImport)}
+                      className={`font-black text-[9px] p-1.5 rounded-lg transition-all flex items-center gap-1 cursor-pointer border ${
+                        showImport 
+                          ? "bg-slate-800 border-slate-700 text-white" 
+                          : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
+                      }`}
+                      title="Upload custom questions bank (رفع ملف أسئلة)"
+                    >
+                      <Upload size={11} />
+                    </button>
+                    
+                    {sessionQuestions.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => resetQuestions()}
+                        className="bg-slate-800 hover:bg-slate-700 text-slate-400 font-bold text-[8px] px-2 py-1 rounded transition-all cursor-pointer"
+                        title="Reset progress"
+                      >
+                        Reset
+                      </button>
+                    )}
+                 </div>
+              </div>
+
+              {/* Collapsible Upload Panel inside Examiner Chat */}
+              {showImport && (
+                <div className="mx-4 my-3 p-4 bg-white border border-slate-200 rounded-2xl flex flex-col gap-3 shrink-0 shadow-lg z-10">
+                  <div className="flex-1">
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="text-[9px] font-black text-slate-700 uppercase">رفع ملف الأسئلة (.json أو .txt):</span>
+                      <button onClick={() => setShowImport(false)} className="text-slate-400 hover:text-slate-600 text-xs">✕</button>
+                    </div>
+                    <label className="flex flex-col items-center justify-center border-2 border-dashed border-slate-200 hover:border-blue-400 bg-slate-50 hover:bg-blue-50/20 py-4 px-2 rounded-xl cursor-pointer transition-all">
+                      <div className="flex flex-col items-center gap-1">
+                        <Upload size={16} className="text-slate-400" />
+                        <span className="text-[10px] font-bold text-slate-500 text-center">اضغط هنا أو اسحب الملف لرفعه</span>
+                      </div>
+                      <input
+                        type="file"
+                        accept=".json,.txt,.md"
+                        onChange={handleFileUpload}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[9px] font-black text-slate-700 uppercase">أو الصق الأسئلة مباشرة بالأسفل:</span>
+                    <textarea
+                      value={pastedQAs}
+                      onChange={(e) => setPastedQAs(e.target.value)}
+                      placeholder={`س: ما هي أسباب الاستسقاء؟\nج: تليف الكبد والقلب والفشل الكلوي...`}
+                      className="w-full h-20 bg-slate-50 border border-slate-200 text-xs rounded-lg p-2 font-medium placeholder:text-slate-400 outline-none focus:bg-white focus:border-blue-500 transition-all resize-none"
+                    />
+                    <button
+                      onClick={() => handleImportText(pastedQAs)}
+                      className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black text-[9px] py-1.5 rounded-lg transition-all uppercase mt-1 tracking-wider cursor-pointer font-sans"
+                    >
+                      حفظ الأسئلة المستوردة (Save Paste)
+                    </button>
+                  </div>
+
+                  {importMessage && (
+                    <div className={`p-2 rounded-lg text-[9px] font-bold leading-relaxed ${
+                      importMessage.type === "success" 
+                        ? "bg-emerald-50 text-emerald-800 border border-emerald-200" 
+                        : "bg-rose-50 text-rose-800 border border-rose-200"
+                    }`}>
+                      {importMessage.text}
+                    </div>
+                  )}
                 </div>
               )}
 
-              <div className="flex gap-2">
-                <button
-                  onClick={() => triggerNextQuestion()}
-                  disabled={!currentCase?.examinerQuestions || currentCase.examinerQuestions.length === 0}
-                  className="flex-1 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-slate-950 font-black text-[11px] py-2.5 px-4 rounded-xl cursor-pointer transition-all uppercase flex justify-center items-center gap-1.5 active:scale-95 shadow-sm"
-                >
-                  {currentQuestionId ? "سؤال آخر (Another Question)" : "اطرح سؤال من الملف (Ask From File)"}
-                </button>
-                {askedQuestionIds && askedQuestionIds.length > 0 && (
-                  <button
-                    onClick={() => resetQuestions()}
-                    className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-black text-[10px] py-2.5 px-3 rounded-xl transition-all uppercase"
-                    title="Reset all questions progress"
-                  >
-                    تصفير (Reset)
-                  </button>
-                )}
-              </div>
+              {/* Modern Bento Control Panel for the 5 random board viva questions */}
+              {sessionQuestions.length > 0 && (
+                <div className="mx-4 mt-3 mb-1.5 p-3.5 bg-white border border-slate-200/60 shadow-sm rounded-2xl flex flex-col gap-2.5 shrink-0">
+                  <div className="flex justify-between items-center text-[10px] font-black uppercase text-slate-500 tracking-wide">
+                    <span className="flex items-center gap-1.5 font-sans">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                      Oral Exam Progress (امتحان خمسة أسئلة)
+                    </span>
+                    <span className="text-slate-800 bg-slate-100 px-2.5 py-1 rounded-full font-mono font-extrabold text-[10px]">
+                      {askedCount < 4 ? `Question: ${askedCount + 1} / 5` : "Completed 5 / 5"}
+                    </span>
+                  </div>
 
-              {/* Upload panel trigger */}
-              <div className="border-t border-slate-200/60 pt-2.5 mt-1 flex flex-col gap-2">
-                <button
-                  onClick={() => setShowImport(!showImport)}
-                  className="w-full flex items-center justify-between py-1.5 px-3 hover:bg-slate-200/50 rounded-lg text-[10px] font-bold text-slate-600 uppercase transition-all"
-                >
-                  <span className="flex items-center gap-1.5">
-                    <Upload size={12} />
-                    رفع/تعديل ملف الأسئلة (Upload/Paste Custom Bank)
-                  </span>
-                  <span>{showImport ? "إغلاق ✕" : "فتح ＋"}</span>
-                </button>
-
-                {showImport && (
-                  <div className="bg-white border border-slate-100 rounded-xl p-3 flex flex-col gap-3 mt-1 shadow-inner">
-                    <div className="flex flex-col gap-1">
-                      <span className="text-[9px] font-black text-slate-700 uppercase">1. رفع ملف (.json أو .txt):</span>
-                      <label className="flex flex-col items-center justify-center border-2 border-dashed border-slate-200 hover:border-blue-400 bg-slate-50 hover:bg-blue-50/20 py-4 px-2 rounded-xl cursor-pointer transition-all">
-                        <div className="flex flex-col items-center gap-1">
-                          <Upload size={16} className="text-slate-400" />
-                          <span className="text-[10px] font-bold text-slate-500 text-center">اضغط هنا أو اسحب الملف لرفعه</span>
-                        </div>
-                        <input
-                          type="file"
-                          accept=".json,.txt,.md"
-                          onChange={handleFileUpload}
-                          className="hidden"
-                        />
-                      </label>
-                    </div>
-
-                    <div className="flex flex-col gap-1">
-                      <span className="text-[9px] font-black text-slate-700 uppercase">2. أو الصق الأسئلة مباشرة بالأسفل:</span>
-                      <textarea
-                        value={pastedQAs}
-                        onChange={(e) => setPastedQAs(e.target.value)}
-                        placeholder={`س: ما هي أسباب الاستسقاء؟\nج: تليف الكبد والقلب والفشل الكلوي.\n\nس: سؤال آخر؟\nج: إجابتك النموذجية.`}
-                        className="w-full h-24 bg-slate-50 border border-slate-200 text-xs rounded-lg p-2 font-medium placeholder:text-slate-400 outline-none focus:bg-white focus:border-blue-500 transition-all resize-none"
-                      />
+                  <div className="flex flex-wrap gap-2.5 items-center justify-between">
+                    {askedCount < 4 ? (
                       <button
-                        onClick={() => handleImportText(pastedQAs)}
-                        className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black text-[9px] py-1.5 rounded-lg transition-all uppercase mt-1 tracking-wider"
+                        type="button"
+                        onClick={() => triggerNextQuestion()}
+                        className="bg-amber-500 hover:bg-amber-600 active:scale-95 text-slate-950 font-black text-[11px] py-2 px-4 rounded-xl cursor-pointer transition-all uppercase flex items-center gap-1.5 border-none shadow-sm font-sans"
                       >
-                        حفظ الأسئلة المستوردة (Save Paste)
+                        <BookOpen size={12} />
+                        <span>Ask another question ({askedCount + 1}/5)</span>
                       </button>
-                    </div>
-
-                    {importMessage && (
-                      <div className={`p-2 rounded-lg text-[9px] font-bold leading-relaxed ${
-                        importMessage.type === "success" 
-                          ? "bg-emerald-50 text-emerald-800 border border-emerald-200" 
-                          : "bg-rose-50 text-rose-800 border border-rose-200"
-                      }`}>
-                        {importMessage.text}
-                      </div>
+                    ) : (
+                      <span className="text-[10px] sm:text-xs bg-emerald-50 text-emerald-800 border border-emerald-200/40 font-bold px-3 py-2 rounded-xl uppercase flex items-center gap-1 leading-none shadow-xs font-sans">
+                        <Check size={12} className="text-emerald-600" />
+                        تم الانتهاء من الـ 5 أسئلة لهذه المحاولة.
+                      </span>
                     )}
 
-                    <div className="text-[8px] text-slate-400 leading-normal font-medium bg-slate-50 p-2 rounded-lg">
-                      💡 <strong>الصيغة المدعومة (Format):</strong><br/>
-                      - ملف JSON يحتوي على مصفوفة أسئلة.<br/>
-                      - أو نص عادي يفصل بين كل سؤال بالشكل:<br/>
-                      <code className="bg-slate-200 text-slate-700 px-1 py-0.5 rounded font-mono">س: السؤال هنا ...</code><br/>
-                      <code className="bg-slate-200 text-slate-700 px-1 py-0.5 rounded font-mono">ج: الإجابة هناك ...</code>
+                    <button
+                      type="button"
+                      onClick={() => resetQuestions()}
+                      className="hover:bg-slate-100 text-slate-600 hover:text-slate-800 font-extrabold text-[10px] py-1.5 px-3 rounded-xl transition-all flex items-center gap-1 cursor-pointer bg-white border border-slate-350 shadow-xs font-sans"
+                      title="Get 5 new random questions"
+                    >
+                      🔄 Reset (خمس أسئلة جديدة)
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Active question indicator sticky banner */}
+              {currentQuestionId && (() => {
+                const activeQ = currentCase?.examinerQuestions?.find(q => q.id === currentQuestionId);
+                return (
+                  <div className="bg-amber-500/10 border-b border-amber-500/20 p-3 px-4 flex justify-between items-center gap-3 shrink-0">
+                    <div className="min-w-0 flex-1">
+                      <span className="text-[9px] font-black text-amber-600 uppercase tracking-widest block mb-0.5">
+                        Active Board Question (السؤال النشط):
+                      </span>
+                      <p className="text-[11px] sm:text-xs text-slate-800 font-bold leading-relaxed font-sans truncate">
+                        {activeQ?.question}
+                      </p>
+                    </div>
+                    {/* Ask next file question directly */}
+                    <button
+                      type="button"
+                      onClick={() => triggerNextQuestion()}
+                      className="bg-amber-500 hover:bg-amber-600 px-2.5 py-1.5 rounded text-[9px] font-extrabold text-slate-900 transition-all shrink-0 cursor-pointer border-none"
+                    >
+                      Next Q
+                    </button>
+                  </div>
+                );
+              })()}
+
+              <div 
+                ref={examinerScrollRef}
+                onScroll={handleExaminerScroll}
+                className="flex-1 overflow-y-auto min-h-0 p-4 md:p-6 space-y-4 md:space-y-6 scroll-smooth pb-[120px] lg:pb-6"
+              >
+                {examinerMessages.length === 0 && (
+                  <div className="text-center py-12 flex flex-col items-center">
+                    <div className="bg-slate-900 p-4 rounded-2xl shadow-md mb-4 border border-slate-800 flex items-center justify-center text-blue-400">
+                      <Shield size={28} strokeWidth={1.5} />
+                    </div>
+                    <h3 className="text-sm font-black text-slate-300 tracking-tight mb-1">Examiner Observation</h3>
+                    <p className="text-slate-400 text-[10px] font-medium max-w-xs leading-relaxed">
+                      The examiner is monitoring your performance. Report your findings or answer questions directed to you by the examiner.
+                    </p>
+                  </div>
+                )}
+
+                {examinerMessages.map((msg, i) => (
+                  <motion.div
+                    key={i}
+                    initial={{ opacity: 0, x: 10, scale: 0.98 }}
+                    animate={{ opacity: 1, x: 0, scale: 1 }}
+                    className={`flex ${msg.role === "student" ? "justify-end" : "justify-start"}`}
+                  >
+                    <div className={`max-w-[85%] rounded-[1.5rem] p-4 shadow-sm border transition-all ${
+                      msg.role === "student" 
+                        ? "bg-slate-800 text-white border-slate-700 rounded-tr-none" 
+                        : "bg-blue-900/10 text-blue-900 border-blue-200/50 rounded-tl-none italic font-bold"
+                    }`}>
+                      <p className="text-sm leading-relaxed">{msg.content}</p>
+                    </div>
+                  </motion.div>
+                ))}
+                
+                {isTyping && chatTarget === "examiner" && (
+                  <div className="flex justify-start">
+                    <div className="bg-slate-800 border border-slate-700 rounded-2xl p-3 shadow-sm flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
+                      <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
+                      <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce"></span>
                     </div>
                   </div>
                 )}
               </div>
             </div>
-
-            <div 
-              ref={examinerScrollRef}
-              onScroll={handleExaminerScroll}
-              className="flex-1 overflow-y-auto min-h-0 p-4 md:p-6 space-y-4 md:space-y-6 scroll-smooth pb-[120px] lg:pb-6"
-            >
-              {examinerMessages.length === 0 && (
-                <div className="text-center py-12 flex flex-col items-center">
-                  <div className="bg-slate-900 p-4 rounded-2xl shadow-xl mb-4 border border-slate-800 flex items-center justify-center text-blue-400">
-                    <Shield size={32} strokeWidth={1.5} />
-                  </div>
-                  <h3 className="text-lg font-black text-slate-300 tracking-tight mb-1">Examiner Observation</h3>
-                  <p className="text-slate-500 text-[11px] font-medium max-w-xs leading-relaxed">
-                    The examiner is monitoring your performance. Report your findings or answer questions directed to you by the examiner.
-                  </p>
-                </div>
-              )}
-
-              {examinerMessages.map((msg, i) => (
-                <motion.div
-                  key={i}
-                  initial={{ opacity: 0, x: 10, scale: 0.98 }}
-                  animate={{ opacity: 1, x: 0, scale: 1 }}
-                  className={`flex ${msg.role === "student" ? "justify-end" : "justify-start"}`}
-                >
-                  <div className={`max-w-[85%] rounded-[1.5rem] p-4 shadow-sm border transition-all ${
-                    msg.role === "student" 
-                      ? "bg-slate-800 text-white border-slate-700 rounded-tr-none" 
-                      : "bg-blue-900/10 text-blue-900 border-blue-200/50 rounded-tl-none italic font-bold"
-                  }`}>
-                    <p className="text-sm leading-relaxed">{msg.content}</p>
-                  </div>
-                </motion.div>
-              ))}
-              
-              {isTyping && chatTarget === "examiner" && (
-                <div className="flex justify-start">
-                  <div className="bg-slate-800 border border-slate-700 rounded-2xl p-4 shadow-sm flex items-center gap-1.5 px-4">
-                    <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
-                    <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
-                    <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce"></span>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
+          )}
+          
         </div>
       </div>
 
@@ -685,33 +839,31 @@ export const HistoryTab: React.FC = () => {
       <div className="fixed lg:relative bottom-0 left-0 right-0 z-30 lg:z-10 bg-white border-t border-slate-200 p-4 md:p-5 shrink-0 shadow-[0_-4px_16px_rgba(0,0,0,0.06)] w-full">
         <div className="max-w-4xl mx-auto flex flex-col gap-3">
            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-              <div className="flex items-center gap-3">
-                 {/* Chat Target Toggle */}
-                 <div className="flex bg-slate-100 p-1 rounded-xl">
-                    <button 
-                      onClick={() => setChatTarget("patient")}
-                      className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-tight transition-all flex items-center gap-1.5 ${
-                        chatTarget === "patient" ? "bg-white text-blue-600 shadow-sm" : "text-slate-400"
-                      }`}
-                    >
-                      <MessageCircle size={12} />
-                      Patient
-                    </button>
-                    <button 
-                      onClick={() => setChatTarget("examiner")}
-                      className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-tight transition-all flex items-center gap-1.5 ${
-                        chatTarget === "examiner" ? "bg-slate-900 text-white shadow-sm" : "text-slate-400"
-                      }`}
-                    >
-                      <Shield size={12} />
-                      Examiner
-                    </button>
-                 </div>
+              <div className="flex items-center gap-2 xs:gap-3">
+                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                    <Activity size={12} className="text-blue-500" /> Options
+                 </span>
+                 
                  <div className="h-4 w-[1px] bg-slate-200 mx-1"></div>
+                 
+                 {/* Voice Recognition component */}
                  <VoiceRecognition 
                    onTranscript={(text) => setInputText(prev => prev + (prev ? " " : "") + text)} 
                    disabled={isTyping}
                  />
+
+                 {/* Compact integrated "Ask From File" next to speaker icon in Examiner tab */}
+                 {chatTarget === "examiner" && (
+                   <button
+                     type="button"
+                     onClick={() => triggerNextQuestion()}
+                     disabled={!currentCase?.examinerQuestions || currentCase.examinerQuestions.length === 0}
+                     className="bg-amber-500 hover:bg-amber-600 hover:scale-105 active:scale-95 text-slate-950 p-2 rounded-full transition-all shadow-sm flex items-center justify-center shrink-0 disabled:opacity-50 cursor-pointer border-none"
+                     title="Ask question from file (اطرح سؤال من الملف)"
+                   >
+                     <BookOpen size={14} strokeWidth={2.5} />
+                   </button>
+                 )}
               </div>
               <span className="hidden sm:flex text-[10px] font-black text-slate-400 uppercase tracking-widest items-center gap-1.5">
                  <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></div>
@@ -735,7 +887,7 @@ export const HistoryTab: React.FC = () => {
              <button
                onClick={() => handleSendMessage(inputText)}
                disabled={!inputText.trim() || isTyping}
-               className={`text-white p-3.5 rounded-2xl disabled:opacity-50 transition-all shadow-md active:scale-95 flex items-center justify-center shrink-0 ${
+               className={`text-white p-3.5 rounded-2xl disabled:opacity-50 transition-all shadow-md active:scale-95 flex items-center justify-center shrink-0 cursor-pointer border-none ${
                  chatTarget === "examiner" ? "bg-slate-900 hover:bg-slate-800" : "bg-blue-600 hover:bg-blue-700"
                }`}
              >
@@ -755,7 +907,7 @@ export const HistoryTab: React.FC = () => {
                  value={studentNotes.history}
                  onChange={(e) => updateNotes("history", e.target.value)}
                  placeholder="Record findings here..."
-                 className="bg-transparent border-none focus:ring-0 text-[16px] font-semibold text-slate-600 w-1/2 text-right italic p-0"
+                 className="bg-transparent border-none focus:ring-0 text-[16px] font-semibold text-slate-600 w-1/2 text-right italic p-0 outline-none"
                  style={{ fontSize: "16px" }}
               />
            </div>
@@ -764,4 +916,5 @@ export const HistoryTab: React.FC = () => {
     </div>
   );
 };
+
 
