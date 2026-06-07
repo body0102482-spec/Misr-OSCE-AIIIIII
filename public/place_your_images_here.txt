@@ -1,0 +1,7 @@
+You can upload your clinical images (e.g., JPEG, PNG, etc.) directly into this 'public' folder.
+You can then reference them in your cases file (/src/data/cases.ts) using absolute paths like:
+"/my_image.png" or "/inspection_rash.jpg"
+
+To upload:
+1. Drag and drop files from your computer into this 'public' directory in the file explorer.
+2. Or use the upload option in your file explorer interface.

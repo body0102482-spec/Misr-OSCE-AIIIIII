@@ -1,0 +1,6 @@
+{
+  "name": "OSCE Mentor AI",
+  "description": "An AI-powered clinical exam simulator for Egyptian medical students.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
