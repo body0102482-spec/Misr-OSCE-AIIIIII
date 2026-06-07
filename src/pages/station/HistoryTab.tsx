@@ -524,7 +524,7 @@ export const HistoryTab: React.FC = () => {
              </div>
              <div className="text-center sm:text-left min-w-0">
                <div className="text-[11px] font-black tracking-wide uppercase leading-tight truncate">
-                 Patient Encounter (طيف المريض)
+                 Patient Encounter
                </div>
                <div className="text-[10px] font-bold opacity-70 leading-none mt-1 truncate">
                  {currentCase?.patient?.name || "Patient"} ({currentCase?.patient?.age || "?"} y/o)
@@ -548,7 +548,7 @@ export const HistoryTab: React.FC = () => {
              </div>
              <div className="text-center sm:text-left min-w-0">
                <div className="text-[11px] font-black tracking-wide uppercase leading-tight truncate">
-                 Examiner Box (الممتحن والملف)
+                 Examiner Box
                </div>
                <div className="text-[10px] font-bold opacity-75 leading-none mt-1 truncate">
                  VIVA & Active Questions
@@ -641,35 +641,12 @@ export const HistoryTab: React.FC = () => {
                       <span>{askedCount < 4 ? `Question ${askedCount + 1}/5` : "Completed 5/5"}</span>
                     </button>
 
-                    {/* Upload Custom Bank button */}
-                    <button
-                      type="button"
-                      onClick={() => setShowImport(!showImport)}
-                      className={`font-black text-[9px] p-1.5 rounded-lg transition-all flex items-center gap-1 cursor-pointer border ${
-                        showImport 
-                          ? "bg-slate-800 border-slate-700 text-white" 
-                          : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
-                      }`}
-                      title="Upload custom questions bank (رفع ملف أسئلة)"
-                    >
-                      <Upload size={11} />
-                    </button>
-                    
-                    {sessionQuestions.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => resetQuestions()}
-                        className="bg-slate-800 hover:bg-slate-700 text-slate-400 font-bold text-[8px] px-2 py-1 rounded transition-all cursor-pointer"
-                        title="Reset progress"
-                      >
-                        Reset
-                      </button>
-                    )}
+
                  </div>
               </div>
 
               {/* Collapsible Upload Panel inside Examiner Chat */}
-              {showImport && (
+              {false && (
                 <div className="mx-4 my-3 p-4 bg-white border border-slate-200 rounded-2xl flex flex-col gap-3 shrink-0 shadow-lg z-10">
                   <div className="flex-1">
                     <div className="flex justify-between items-center mb-1">
@@ -719,7 +696,7 @@ export const HistoryTab: React.FC = () => {
               )}
 
               {/* Modern Bento Control Panel for the 5 random board viva questions */}
-              {sessionQuestions.length > 0 && (
+              {false && (
                 <div className="mx-4 mt-3 mb-1.5 p-3.5 bg-white border border-slate-200/60 shadow-sm rounded-2xl flex flex-col gap-2.5 shrink-0">
                   <div className="flex justify-between items-center text-[10px] font-black uppercase text-slate-500 tracking-wide">
                     <span className="flex items-center gap-1.5 font-sans">
@@ -761,7 +738,7 @@ export const HistoryTab: React.FC = () => {
               )}
 
               {/* Active question indicator sticky banner */}
-              {currentQuestionId && (() => {
+              {false && (() => {
                 const activeQ = currentCase?.examinerQuestions?.find(q => q.id === currentQuestionId);
                 return (
                   <div className="bg-amber-500/10 border-b border-amber-500/20 p-3 px-4 flex justify-between items-center gap-3 shrink-0">
@@ -844,13 +821,10 @@ export const HistoryTab: React.FC = () => {
                     <Activity size={12} className="text-blue-500" /> Options
                  </span>
                  
-                 <div className="h-4 w-[1px] bg-slate-200 mx-1"></div>
+
                  
-                 {/* Voice Recognition component */}
-                 <VoiceRecognition 
-                   onTranscript={(text) => setInputText(prev => prev + (prev ? " " : "") + text)} 
-                   disabled={isTyping}
-                 />
+
+
 
                  {/* Compact integrated "Ask From File" next to speaker icon in Examiner tab */}
                  {chatTarget === "examiner" && (
@@ -859,7 +833,7 @@ export const HistoryTab: React.FC = () => {
                      onClick={() => triggerNextQuestion()}
                      disabled={!currentCase?.examinerQuestions || currentCase.examinerQuestions.length === 0}
                      className="bg-amber-500 hover:bg-amber-600 hover:scale-105 active:scale-95 text-slate-950 p-2 rounded-full transition-all shadow-sm flex items-center justify-center shrink-0 disabled:opacity-50 cursor-pointer border-none"
-                     title="Ask question from file (اطرح سؤال من الملف)"
+                     title="Ask question from file"
                    >
                      <BookOpen size={14} strokeWidth={2.5} />
                    </button>
@@ -871,29 +845,35 @@ export const HistoryTab: React.FC = () => {
               </span>
            </div>
 
-           <div className="flex items-center gap-3">
-             <input
-               type="text"
-               value={inputText}
-               onChange={(e) => setInputText(e.target.value)}
-               onKeyDown={(e) => e.key === "Enter" && handleSendMessage(inputText)}
-               placeholder={chatTarget === "patient" ? "Ask the patient..." : "Ask the examiner..."}
-               className={`flex-1 bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-[16px] font-semibold text-slate-800 placeholder:text-slate-400 focus:bg-white focus:ring-2 transition-all outline-none ${
-                 chatTarget === "examiner" ? "focus:ring-slate-900/10 focus:border-slate-800" : "focus:ring-blue-500/10 focus:border-blue-500"
-               }`}
-               style={{ fontSize: "16px" }}
-               disabled={isTyping}
-             />
-             <button
-               onClick={() => handleSendMessage(inputText)}
-               disabled={!inputText.trim() || isTyping}
-               className={`text-white p-3.5 rounded-2xl disabled:opacity-50 transition-all shadow-md active:scale-95 flex items-center justify-center shrink-0 cursor-pointer border-none ${
-                 chatTarget === "examiner" ? "bg-slate-900 hover:bg-slate-800" : "bg-blue-600 hover:bg-blue-700"
-               }`}
-             >
-               <Send size={18} strokeWidth={2.5} />
-             </button>
-           </div>
+            <div className="flex items-center gap-2 md:gap-3">
+              <input
+                type="text"
+                value={inputText}
+                onChange={(e) => setInputText(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSendMessage(inputText)}
+                placeholder={chatTarget === "patient" ? "Ask the patient..." : "Ask the examiner..."}
+                className={`flex-1 bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-[16px] font-semibold text-slate-800 placeholder:text-slate-400 focus:bg-white focus:ring-2 transition-all outline-none ${
+                  chatTarget === "examiner" ? "focus:ring-slate-900/10 focus:border-slate-800" : "focus:ring-blue-500/10 focus:border-blue-500"
+                }`}
+                style={{ fontSize: "16px" }}
+                disabled={isTyping}
+              />
+              <div className="shrink-0">
+                <VoiceRecognition 
+                  onTranscript={(text) => setInputText(prev => prev + (prev ? " " : "") + text)} 
+                  disabled={isTyping}
+                />
+              </div>
+              <button
+                onClick={() => handleSendMessage(inputText)}
+                disabled={!inputText.trim() || isTyping}
+                className={`text-white p-3.5 rounded-2xl disabled:opacity-50 transition-all shadow-md active:scale-95 flex items-center justify-center shrink-0 cursor-pointer border-none ${
+                  chatTarget === "examiner" ? "bg-slate-900 hover:bg-slate-800" : "bg-blue-600 hover:bg-blue-700"
+                }`}
+              >
+                <Send size={18} strokeWidth={2.5} />
+              </button>
+            </div>
            
            {/* Quick Review Tracker */}
            <div className="mt-1.5 flex items-center justify-between bg-slate-50 border border-slate-200/60 rounded-xl p-3 shadow-inner">
