@@ -107,7 +107,7 @@ export const StudentDashboard: React.FC = () => {
       image: "https://images.unsplash.com/photo-1576091160555-217359f42f8c?auto=format&fit=crop&q=80&w=400",
       category: "internal_medicine",
       subcategory: "gastroenterology",
-      planRequired: "FREE PLAN",
+      planRequired: "BASIC PLAN",
       description: "Classical male patient presenting with progressive abdominal distension, mild jaundice, and history of liver disease."
     },
     {
@@ -322,7 +322,7 @@ export const StudentDashboard: React.FC = () => {
       id: "cardio-asdm",
       category: "internal_medicine",
       subcategory: "cardiology",
-      planRequired: "PRO PLAN"
+      planRequired: "FREE PLAN"
     },
     { 
       ...phtnTrRshfCase, 
@@ -371,7 +371,7 @@ export const StudentDashboard: React.FC = () => {
 
   const handleStartOSCE = (c: Case) => {
     // 1. Is this the free case?
-    const isFreeCase = c.id === "ascites-001" || c.name.toLowerCase().includes("ascites");
+    const isFreeCase = c.id === "cardio-asdm" || c.id === "AS*MR-001" || c.name.toLowerCase().includes("aortic stenosis") || c.name.toLowerCase().includes("as + mr");
     
     if (isFreeCase) {
       resetSession();
@@ -403,7 +403,7 @@ export const StudentDashboard: React.FC = () => {
     if (activePlan === "FREE PLAN") {
       setAuthErrorModal({
         title: "Specialty Station Locked",
-        message: "You are currently on the FREE PLAN, which grants access only to the Free Abdomen Ascites examination block. To practice this station, please select of one of our affordable EGP subscription packages below."
+        message: "You are currently on the FREE PLAN, which grants access only to the Free AS + MR (Aortic Stenosis & Mitral Regurgitation) examination block. To practice this station, please select of one of our affordable EGP subscription packages below."
       });
       return;
     }
@@ -541,20 +541,22 @@ export const StudentDashboard: React.FC = () => {
         <div className="flex items-center gap-4">
           
           {/* Admin Toggler button */}
-          <button
-            onClick={() => setIsAdminView(!isAdminView)}
-            className={`px-4 py-2 text-xs font-black rounded-xl border uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer ${
-              isAdminView 
-                ? "bg-slate-900 border-slate-900 text-white shadow-md"
-                : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
-            }`}
-          >
-            <Sliders size={14} />
-            {isAdminView ? "Exit Admin Panel" : "Admin Panel"}
-            {paymentsList.some(p => p.status === "Pending") && (
-              <span className="w-2.5 h-2.5 bg-red-500 rounded-full animate-ping"></span>
-            )}
-          </button>
+          {currentUser.isAdmin && (
+            <button
+              onClick={() => setIsAdminView(!isAdminView)}
+              className={`px-4 py-2 text-xs font-black rounded-xl border uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer ${
+                isAdminView 
+                  ? "bg-slate-900 border-slate-900 text-white shadow-md"
+                  : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+              }`}
+            >
+              <Sliders size={14} />
+              {isAdminView ? "Exit Admin Panel" : "Admin Panel"}
+              {paymentsList.some(p => p.status === "Pending") && (
+                <span className="w-2.5 h-2.5 bg-red-500 rounded-full animate-ping"></span>
+              )}
+            </button>
+          )}
 
           <div className="hidden sm:flex flex-col items-end text-right">
             <span className="text-xs font-black text-slate-900 leading-tight block">{currentUser.fullName}</span>
@@ -1006,15 +1008,18 @@ export const StudentDashboard: React.FC = () => {
               <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[9px] font-black uppercase tracking-widest rounded mb-1 inline-block">
                 Free Case Available
               </span>
-              <h3 className="text-lg font-black text-slate-900 tracking-tight leading-none mb-2">Ascites Examination OSCE</h3>
+              <h3 className="text-lg font-black text-slate-900 tracking-tight leading-none mb-2">AS + MR (Aortic Stenosis & Mitral Regurgitation) OSCE</h3>
               <p className="text-slate-500 text-xs leading-normal max-w-xl font-semibold">
-                An complete mock case comprising history checkout, visual jaundice diagnosis, shifting dullness percussion testing, and a comprehensive oral examiner board response checking. Free to all students.
+                An organic cardiorespiratory OSCE mock case comprising chest tube scar visual inspection, active systolic thrill palpation, custom double murmurs audio auscultation, and a comprehensive oral board exam. Free to all students.
               </p>
             </div>
           </div>
 
           <button
-            onClick={() => handleStartOSCE(coreCasesList[0] as any)}
+            onClick={() => {
+              const asmrCaseObj = coreCasesList.find(c => c.id === "cardio-asdm") || coreCasesList[0];
+              handleStartOSCE(asmrCaseObj as any);
+            }}
             className="px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black uppercase tracking-wider rounded-xl shadow-lg transition-all hover:-translate-y-0.5 cursor-pointer flex items-center gap-1"
           >
             Start Free OSCE
@@ -1251,7 +1256,7 @@ export const StudentDashboard: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredCases.map((cs) => {
               const reqPlan = (cs as any).planRequired || "BASIC PLAN";
-              const isFree = cs.id === "ascites-001" || cs.name.toLowerCase().includes("ascites");
+              const isFree = cs.id === "cardio-asdm" || cs.id === "AS*MR-001" || cs.name.toLowerCase().includes("aortic stenosis") || cs.name.toLowerCase().includes("as + mr");
               
               let isLocked = false;
               if (!isFree) {

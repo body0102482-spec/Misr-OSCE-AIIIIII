@@ -103,16 +103,8 @@ export const AuthPage: React.FC = () => {
     }
   };
 
-  const triggerDemoLogin = (role: 'student' | 'admin') => {
-    if (role === 'student') {
-      setLoginEmail("student@must.edu.eg");
-      setLoginPassword("student123");
-    } else {
-      setLoginEmail("admin@must.edu.eg");
-      setLoginPassword("admin123");
-    }
-    setIsLogin(true);
-    setError(null);
+  const handleForgotPassword = () => {
+    setError("Please contact your administrator (Mahmoud) for password recovery.");
   };
 
   return (
@@ -243,7 +235,7 @@ export const AuthPage: React.FC = () => {
                     <label className="text-xs font-black uppercase text-slate-400 tracking-wider">Password</label>
                     <button 
                       type="button"
-                      onClick={() => triggerDemoLogin('student')} // Convenient bypass
+                      onClick={handleForgotPassword}
                       className="text-xs text-blue-500 font-bold hover:underline"
                     >
                       Forgot Password?
@@ -391,34 +383,6 @@ export const AuthPage: React.FC = () => {
               <ArrowRight size={18} />
             </button>
           </form>
-
-          {/* Quick Sandbox Login Buttons for Examiners */}
-          <div className="mt-10 pt-8 border-t border-slate-100 text-center">
-            <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-3">
-              Developer/Examiner Sandbox Portals
-            </p>
-            <div className="flex flex-col sm:flex-row gap-3 justify-center">
-              <button 
-                type="button"
-                onClick={() => triggerDemoLogin('student')}
-                className="px-4 py-2 bg-blue-50 hover:bg-blue-150 border border-blue-100 text-blue-600 font-bold rounded-xl text-xs transition-colors flex items-center justify-center gap-1.5"
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
-                Login as Student (Mahmoud)
-              </button>
-              <button 
-                type="button"
-                onClick={() => triggerDemoLogin('admin')}
-                className="px-4 py-2 bg-emerald-50 hover:bg-emerald-150 border border-emerald-100 text-emerald-600 font-bold rounded-xl text-xs transition-colors flex items-center justify-center gap-1.5"
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                Login as Admin (Dr. Sherif)
-              </button>
-            </div>
-            <p className="text-[9px] text-slate-400 font-medium mt-1.5">
-              Click either helper button to auto-fill. student pass: student123, admin pass: admin123
-            </p>
-          </div>
 
         </div>
       </div>

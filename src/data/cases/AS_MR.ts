@@ -1,7 +1,7 @@
 import { Case } from "../../types";
 
 export const asdmCase: Case = {
-  id: "asdm-001",
+  id: "AS*MR-001",
   name: "AS + MR (Aortic Stenosis &  MitralMitral Regurgitation )",
   specialty: "Cardiology",
   difficulty: "Hard",
@@ -29,17 +29,13 @@ export const asdmCase: Case = {
   },
   examination: {
     inspection: "General Inspection: Mildly tachypneic, cooperative adolescent male sitting upright. Chest Inspection: Evident linear hyperpigmented scar from a previous chest tube insertion (for past Pleural Effusion) in the left mid-axillary line (NOTE: This is a critical diagnostic discrepancy, as the patient denied surgical history). There is absolutely no precordial bulge (no bulging of the sternum or ribs). No dilated collateral superficial veins, no general chest skin pigmentations, and no active skin lesions.",
-    inspectionImage: "/CARDIAC INSPECTION.jpg, /Chest tube scar.jpg.jpg",
+    inspectionImage: "/Chest tube scar.png",
     palpation: "Apex: Localized in the Left 5th intercostal space, shifted outwards (displaced laterally) from the midclavicular line. On palpation, characters show a distinctly sustained apex (active lifting heave against the finger throughout systole, indicating left ventricular concentric hypertrophy due to severe pressure overload) with absolute absence of systemic or diastolic thrill. Pulsations: No abnormal epigastric, suprasternal, left parasternal, or pulmonary pulsations are detected. Thrills: A distinct, rough systolic thrill is palpable over the 1st Aortic area (right 2nd intercostal space), radiating towards the carotid arteries. No thrills are felt over the pulmonary, parasternal, or apical areas.",
     palpationVideo: "/Cardiac palpation.mp4",
     percussion: "Normal cardiac dullness limits. Lungs show resonant percussion bilaterally, except for possible mild dullness/reduced air entry at the left lung base near his old chest tube scar.",
     auscultation: "Aortic Area Murmur (Aortic Stenosis - AS): The second heart sound (S2) is muffled/soft at the 1st aortic area. A loud, ejection systolic murmur  is heard loudest at the 1st aortic area, propagating/radiating upwards into the carotid neck arteries and downwards to the apex. This murmur increases in intensity when the patient sits up, leans forward, and holds his breath in full expiration.Mitral Area Findings (Mitral Regurgitation - MR): At the cardiac apex, the first heart sound (S1) is soft and muffled due to incomplete closure of the mitral valve leaflets. A loud, blowing pansystolic murmur  is heard loudest at the apex and radiates directly into the left axilla. The murmur becomes more prominent in the left lateral position and after mild physical exertion. . Lungs: Mild expiratory wheezing bilaterally, consistent with his history of bronchial asthma.",
     auscultationAudio: "/AS + PULMONARY STENOSIS.mp3, /MR+TR+VSD.mp3",
-    specialTests: [
-      { name: "Leaning Forward Test", finding: "Ejection systolic murmur at the 1st aortic area increases dramatically when leaning forward in expiration." },
-      { name: "Carotid Radiation", finding: "Systolic murmur in the 1st Aortic area is clearly auscultated radiating to both carotid arteries." },
-      { name: "Pulsus Parvus et Tardus", finding: "Radial pulse is small in volume with a slow, delayed rise, typical of severe aortic stenosis." }
-    ],
+    
     
   },
   investigations: [

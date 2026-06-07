@@ -30,7 +30,7 @@ export interface Case {
     palpation: string;
     percussion: string;
     auscultation: string;
-    specialTests: { name: string; finding: string; image?: string; audio?: string; video?: string }[];
+    specialTests?: { name: string; finding: string; image?: string; audio?: string; video?: string }[];
     inspectionImage?: string;
     palpationImage?: string;
     percussionImage?: string;

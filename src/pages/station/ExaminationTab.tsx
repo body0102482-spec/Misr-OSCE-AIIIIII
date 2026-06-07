@@ -33,7 +33,7 @@ export const ExaminationTab: React.FC = () => {
     { id: "palpation", name: "Palpation", finding: currentCase.examination.palpation, image: currentCase.examination.palpationImage, audio: currentCase.examination.palpationAudio, video: currentCase.examination.palpationVideo },
     { id: "percussion", name: "Percussion", finding: currentCase.examination.percussion, image: currentCase.examination.percussionImage, audio: currentCase.examination.percussionAudio, video: currentCase.examination.percussionVideo },
     { id: "auscultation", name: "Auscultation", finding: currentCase.examination.auscultation, image: currentCase.examination.auscultationImage, audio: currentCase.examination.auscultationAudio, video: currentCase.examination.auscultationVideo },
-    ...currentCase.examination.specialTests.map(t => {
+    ...(currentCase.examination.specialTests || []).map(t => {
       const sId = t.name.toLowerCase().replace(/\s/g, "-");
       return {
         id: sId,
@@ -615,23 +615,16 @@ export const ExaminationTab: React.FC = () => {
               {!isActiveStepResolved ? (
                 <form onSubmit={handleSubmit} className="space-y-3">
                   <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                    <div className="flex items-center gap-2 xs:gap-3">
-                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
-                         <Sparkles size={11} className="text-blue-500" /> Speech Input
-                      </span>
-                      <div className="h-4 w-[1px] bg-slate-200 mx-1"></div>
-                      <VoiceRecognition 
-                        onTranscript={(text) => setInputValue(prev => prev + (prev ? " " : "") + text)} 
-                        disabled={isLoading}
-                      />
-                    </div>
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                       <Sparkles size={11} className="text-blue-500" /> Clinical Observation Input
+                    </span>
                     <span className="hidden sm:flex text-[10px] font-black text-slate-400 uppercase tracking-widest items-center gap-1.5">
                        <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></div>
                        Viva Engine Active
                     </span>
                   </div>
 
-                  <div className="relative flex items-center">
+                  <div className="flex items-center gap-2 md:gap-3">
                     <input
                       type="text"
                       value={inputValue}
@@ -639,15 +632,21 @@ export const ExaminationTab: React.FC = () => {
                       placeholder="Type or speak your clinical observation e.g. 'I note bilateral pitting edema'..."
                       disabled={isLoading}
                       style={{ fontSize: "16px" }}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-5 pr-14 py-3.5 text-[16px] text-slate-800 font-semibold placeholder:text-slate-400 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-50 outline-none transition-all"
+                      className="flex-1 bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3.5 text-[16px] text-slate-800 font-semibold placeholder:text-slate-400 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-50 outline-none transition-all"
                     />
+                    <div className="shrink-0 flex items-center">
+                      <VoiceRecognition 
+                        onTranscript={(text) => setInputValue(prev => prev + (prev ? " " : "") + text)} 
+                        disabled={isLoading}
+                      />
+                    </div>
                     <button
                       type="submit"
                       id="send-step-btn"
                       disabled={!inputValue.trim() || isLoading}
-                      className="absolute right-2.5 p-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:bg-slate-100 disabled:text-slate-300 transition-all cursor-pointer"
+                      className="text-white p-3.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:bg-slate-100 disabled:text-slate-300 transition-all shadow-md active:scale-95 flex items-center justify-center shrink-0 cursor-pointer rounded-2xl border-none"
                     >
-                      <Send size={15} />
+                      <Send size={18} strokeWidth={2.5} />
                     </button>
                   </div>
                   

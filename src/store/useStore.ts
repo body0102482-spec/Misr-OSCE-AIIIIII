@@ -84,30 +84,16 @@ const getInitialState = () => {
   } else {
     users = [
       {
-        fullName: "Dr. Sherif Abdelbary",
-        studentId: "ADMIN-01",
-        university: "Misr University for Science and Technology (MUST)",
-        mobile: "01024828652",
-        email: "admin@must.edu.eg",
-        plan: "PREMIUM PLAN",
-        isAdmin: true,
-        isActivated: true,
-        credits: 9999,
-        planExpiresAt: Date.now() + 365 * 24 * 3600 * 1000,
-        planActivatedAt: Date.now(),
-        startedCases: []
-      },
-      {
         fullName: "Mahmoud Nasser",
         studentId: "MUST-2024-819",
         university: "Misr University for Science and Technology (MUST)",
         mobile: "01024828652",
         email: "student@must.edu.eg",
-        plan: "FREE PLAN",
+        plan: "BASIC PLAN",
         isAdmin: false,
         isActivated: true,
-        credits: 0,
-        planExpiresAt: 0,
+        credits: 10,
+        planExpiresAt: Date.now() + 60 * 24 * 3600 * 1000,
         planActivatedAt: Date.now(),
         startedCases: []
       },
@@ -126,18 +112,50 @@ const getInitialState = () => {
         startedCases: []
       }
     ];
-    localStorage.setItem("osce-users", JSON.stringify(users));
   }
 
-  // 2. Initial Passwords cache
-  if (!localStorage.getItem("osce-passwords")) {
-    const passwords = {
-      "admin@must.edu.eg": "admin123",
-      "student@must.edu.eg": "student123",
-      "mariam@must.edu.eg": "mariam123"
+  // FORCE Mahmoud98302 (case-insensitive) to be the ONLY admin, and downgrade other admins
+  users = users.map((u) => {
+    const isMahmoudAdmin = u.email.trim().toLowerCase() === "mahmoud98302";
+    return {
+      ...u,
+      isAdmin: isMahmoudAdmin
     };
-    localStorage.setItem("osce-passwords", JSON.stringify(passwords));
+  });
+
+  // Ensure Mahmoud98302 is in the list
+  if (!users.some((u) => u.email.trim().toLowerCase() === "mahmoud98302")) {
+    users.push({
+      fullName: "Admin Mahmoud",
+      studentId: "ADMIN-98302",
+      university: "Misr University for Science and Technology (MUST)",
+      mobile: "01024828652",
+      email: "mahmoud98302",
+      plan: "PREMIUM PLAN",
+      isAdmin: true,
+      isActivated: true,
+      credits: 99999,
+      planExpiresAt: Date.now() + 3650 * 24 * 3600 * 1000,
+      planActivatedAt: Date.now(),
+      startedCases: []
+    });
   }
+
+  localStorage.setItem("osce-users", JSON.stringify(users));
+
+  // 2. Initial Passwords cache
+  let passwords: Record<string, string> = {
+    "student@must.edu.eg": "student123",
+    "mariam@must.edu.eg": "mariam123"
+  };
+  const localPasswords = localStorage.getItem("osce-passwords");
+  if (localPasswords) {
+    try {
+      passwords = { ...passwords, ...JSON.parse(localPasswords) };
+    } catch (e) {}
+  }
+  passwords["mahmoud98302"] = "Vet20202025";
+  localStorage.setItem("osce-passwords", JSON.stringify(passwords));
 
   // 3. Initial Payments
   const localPayments = localStorage.getItem("osce-payments");
