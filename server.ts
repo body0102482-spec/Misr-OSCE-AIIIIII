@@ -58,7 +58,7 @@ function loadDB() {
       studentId: "ADMIN-98302",
       university: "Misr University for Science and Technology (MUST)",
       mobile: "01024328652",
-      email: "mahmoud98302",
+      email: "mahmoud98302@must.com",
       plan: "PREMIUM PLAN",
       isAdmin: true,
       isActivated: true,
@@ -72,7 +72,7 @@ function loadDB() {
   const defaultPasswords = {
     "student@must.edu.eg": "student123",
     "mariam@must.edu.eg": "mariam123",
-    "mahmoud98302": "Vet20202025"
+    "mahmoud98302@must.com": "Vet20202025"
   };
 
   const defaultPayments = [
@@ -372,7 +372,7 @@ app.post("/api/auth/register", (req, res) => {
   }
 
   // Force Mahmoud to be admin, everyone else registered starts as FREE PLAN
-  const isMahmoud = cleanEmail === "mahmoud98302";
+  const isMahmoud = cleanEmail === "mahmoud98302@must.com";
   const plan = isMahmoud ? "PREMIUM PLAN" : ("FREE PLAN" as const);
   const credits = isMahmoud ? 99999 : 0;
   const isAdmin = isMahmoud;

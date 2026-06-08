@@ -828,15 +828,7 @@ export const HistoryTab: React.FC = () => {
                     <Activity size={12} className="text-blue-500" /> Options
                  </span>
 
-                 {/* Unified Speaking Button located here, beautifully styled and separated */}
-                 <div className="shrink-0 scale-90 sm:scale-95 origin-left">
-                   <VoiceRecognition 
-                     onTranscript={(text) => setInputText(prev => prev + (prev ? " " : "") + text)} 
-                     disabled={isTyping}
-                   />
-                 </div>
-                 
-                 {/* Compact integrated "Ask From File" next to speaker icon in Examiner tab */}
+                 {/* Compact integrated "Ask From File" inside Examiner tab */}
                  {chatTarget === "examiner" && (
                    <button
                      type="button"
@@ -869,15 +861,21 @@ export const HistoryTab: React.FC = () => {
                 style={{ fontSize: "16px" }}
                 disabled={isTyping}
               />
-              <button
-                onClick={() => handleSendMessage(inputText)}
-                disabled={!inputText.trim() || isTyping}
-                className={`text-white p-3.5 rounded-2xl disabled:opacity-50 transition-all shadow-md active:scale-95 flex items-center justify-center shrink-0 cursor-pointer border-none ${
-                  chatTarget === "examiner" ? "bg-slate-900 hover:bg-slate-800" : "bg-blue-600 hover:bg-blue-700"
-                }`}
-              >
-                <Send size={18} strokeWidth={2.5} />
-              </button>
+              <div className="shrink-0 flex items-center gap-2">
+                <VoiceRecognition 
+                  onTranscript={(text) => setInputText(prev => prev + (prev ? " " : "") + text)} 
+                  disabled={isTyping}
+                />
+                <button
+                  onClick={() => handleSendMessage(inputText)}
+                  disabled={!inputText.trim() || isTyping}
+                  className={`text-white p-3.5 rounded-2xl disabled:opacity-50 transition-all shadow-md active:scale-95 flex items-center justify-center shrink-0 cursor-pointer border-none ${
+                    chatTarget === "examiner" ? "bg-slate-900 hover:bg-slate-800" : "bg-blue-600 hover:bg-blue-700"
+                  }`}
+                >
+                  <Send size={18} strokeWidth={2.5} />
+                </button>
+              </div>
             </div>
            
            {/* Quick Review Tracker */}

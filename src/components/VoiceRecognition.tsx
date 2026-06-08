@@ -108,7 +108,7 @@ export const VoiceRecognition: React.FC<VoiceRecognitionProps> = ({ onTranscript
 
   return (
     <div className="flex items-center gap-2 relative">
-      <div className="flex bg-slate-100 p-1 rounded-xl text-[10px] shrink-0">
+      <div className="hidden sm:flex bg-slate-100 p-1 rounded-xl text-[10px] shrink-0">
         {(["auto", "ar-EG", "en-US"] as LangMode[]).map((mode) => (
           <button
             key={mode}

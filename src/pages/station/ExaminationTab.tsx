@@ -622,14 +622,6 @@ export const ExaminationTab: React.FC = () => {
                       <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
                          <Sparkles size={11} className="text-blue-500" /> Clinical Observation Input
                       </span>
-                      
-                      {/* Unified Speaking Button located here, beautifully styled and separated */}
-                      <div className="shrink-0 scale-90 sm:scale-95 origin-left">
-                        <VoiceRecognition 
-                          onTranscript={(text) => setInputValue(prev => prev + (prev ? " " : "") + text)} 
-                          disabled={isLoading}
-                        />
-                      </div>
                     </div>
                     <span className="hidden sm:flex text-[10px] font-black text-slate-400 uppercase tracking-widest items-center gap-1.5">
                        <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></div>
@@ -647,14 +639,20 @@ export const ExaminationTab: React.FC = () => {
                       style={{ fontSize: "16px" }}
                       className="flex-1 bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3.5 text-[16px] text-slate-800 font-semibold placeholder:text-slate-400 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-50 outline-none transition-all"
                     />
-                    <button
-                      type="submit"
-                      id="send-step-btn"
-                      disabled={!inputValue.trim() || isLoading}
-                      className="text-white p-3.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:bg-slate-100 disabled:text-slate-300 transition-all shadow-md active:scale-95 flex items-center justify-center shrink-0 cursor-pointer rounded-2xl border-none"
-                    >
-                      <Send size={18} strokeWidth={2.5} />
-                    </button>
+                    <div className="shrink-0 flex items-center gap-2">
+                      <VoiceRecognition 
+                        onTranscript={(text) => setInputValue(prev => prev + (prev ? " " : "") + text)} 
+                        disabled={isLoading}
+                      />
+                      <button
+                        type="submit"
+                        id="send-step-btn"
+                        disabled={!inputValue.trim() || isLoading}
+                        className="text-white p-3.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:bg-slate-100 disabled:text-slate-300 transition-all shadow-md active:scale-95 flex items-center justify-center shrink-0 cursor-pointer rounded-2xl border-none"
+                      >
+                        <Send size={18} strokeWidth={2.5} />
+                      </button>
+                    </div>
                   </div>
                   
                   <div className="flex justify-between items-center bg-amber-500/5 border border-amber-500/10 rounded-xl p-3">

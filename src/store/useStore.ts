@@ -116,23 +116,23 @@ const getInitialState = () => {
     ];
   }
 
-  // FORCE Mahmoud98302 (case-insensitive) to be the ONLY admin, and downgrade other admins
+  // FORCE Mahmoud98302@must.com (case-insensitive) to be the ONLY admin, and downgrade other admins
   users = users.map((u) => {
-    const isMahmoudAdmin = u.email.trim().toLowerCase() === "mahmoud98302";
+    const isMahmoudAdmin = u.email.trim().toLowerCase() === "mahmoud98302@must.com";
     return {
       ...u,
       isAdmin: isMahmoudAdmin
     };
   });
 
-  // Ensure Mahmoud98302 is in the list
-  if (!users.some((u) => u.email.trim().toLowerCase() === "mahmoud98302")) {
+  // Ensure Mahmoud98302@must.com is in the list
+  if (!users.some((u) => u.email.trim().toLowerCase() === "mahmoud98302@must.com")) {
     users.push({
       fullName: "Admin Mahmoud",
       studentId: "ADMIN-98302",
       university: "Misr University for Science and Technology (MUST)",
       mobile: "01024828652",
-      email: "mahmoud98302",
+      email: "mahmoud98302@must.com",
       plan: "PREMIUM PLAN",
       isAdmin: true,
       isActivated: true,
@@ -156,7 +156,7 @@ const getInitialState = () => {
       passwords = { ...passwords, ...JSON.parse(localPasswords) };
     } catch (e) {}
   }
-  passwords["mahmoud98302"] = "Vet20202025";
+  passwords["mahmoud98302@must.com"] = "Vet20202025";
   localStorage.setItem("osce-passwords", JSON.stringify(passwords));
 
   // 3. Initial Payments
