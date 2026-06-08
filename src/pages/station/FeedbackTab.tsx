@@ -485,7 +485,7 @@ export const FeedbackTab: React.FC = () => {
         <button
           onClick={() => {
             resetSession();
-            navigate("/cases");
+            navigate("/");
           }}
           className="flex-1 bg-slate-900 text-white px-6 py-4 rounded-xl text-sm font-black hover:bg-slate-800 transition-all shadow-md active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
         >

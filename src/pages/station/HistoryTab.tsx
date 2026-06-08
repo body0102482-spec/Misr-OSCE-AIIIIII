@@ -575,7 +575,7 @@ export const HistoryTab: React.FC = () => {
               <div 
                 ref={patientScrollRef}
                 onScroll={handlePatientScroll}
-                className="flex-1 overflow-y-auto min-h-0 p-4 md:p-6 space-y-4 md:space-y-6 scroll-smooth bg-slate-50/20 pb-[120px] lg:pb-6"
+                className="flex-1 overflow-y-auto min-h-0 p-4 md:p-6 space-y-4 md:space-y-6 scroll-smooth bg-slate-50/20 pb-6"
               >
                 {messages.length === 0 && (
                   <div className="text-center py-12 flex flex-col items-center">
@@ -765,7 +765,7 @@ export const HistoryTab: React.FC = () => {
               <div 
                 ref={examinerScrollRef}
                 onScroll={handleExaminerScroll}
-                className="flex-1 overflow-y-auto min-h-0 p-4 md:p-6 space-y-4 md:space-y-6 scroll-smooth pb-[120px] lg:pb-6"
+                className="flex-1 overflow-y-auto min-h-0 p-4 md:p-6 space-y-4 md:space-y-6 scroll-smooth pb-6"
               >
                 {examinerMessages.length === 0 && (
                   <div className="text-center py-12 flex flex-col items-center">
@@ -813,7 +813,7 @@ export const HistoryTab: React.FC = () => {
       </div>
 
       {/* Unified Input Control */}
-      <div className="fixed lg:relative bottom-0 left-0 right-0 z-30 lg:z-10 bg-white border-t border-slate-200 p-4 md:p-5 shrink-0 shadow-[0_-4px_16px_rgba(0,0,0,0.06)] w-full">
+      <div className="relative bg-white border-t border-slate-200 p-4 md:p-5 shrink-0 shadow-[0_-4px_16px_rgba(0,0,0,0.06)] w-full z-10">
         <div className="max-w-4xl mx-auto flex flex-col gap-3">
            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
               <div className="flex items-center gap-2 xs:gap-3">

@@ -47,7 +47,7 @@ export const StationPage: React.FC = () => {
 
   useEffect(() => {
     if (!currentCase) {
-      navigate("/cases");
+      navigate("/");
       return;
     }
     startTimer();
@@ -117,7 +117,7 @@ export const StationPage: React.FC = () => {
             <span className="font-mono font-bold text-xs md:text-lg leading-none">{formatTime(timer)}</span>
           </div>
           <Link 
-            to="/cases"
+            to="/"
             onClick={() => resetSession()}
             className="bg-slate-800 hover:bg-slate-700 text-white px-3 md:px-5 py-1.5 md:py-2 rounded-xl font-bold text-[10px] md:text-sm transition-all uppercase tracking-wider shadow-sm active:scale-95"
           >

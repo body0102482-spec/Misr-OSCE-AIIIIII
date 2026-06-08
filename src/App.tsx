@@ -22,7 +22,7 @@ export default function App() {
           path="/dashboard" 
           element={currentUser ? <StudentDashboard /> : <Navigate to="/auth" />} 
         />
-        <Route path="/cases" element={<CaseSelection />} />
+        <Route path="/cases" element={<Navigate to="/" replace />} />
         <Route path="/station" element={<StationPage />} />
       </Routes>
     </BrowserRouter>
