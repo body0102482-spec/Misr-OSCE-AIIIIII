@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { User, Activity, Clock, ChevronRight, Send, Loader2, ClipboardCheck, Shield, MessageCircle, Upload, X, FileText, Check, Plus, BookOpen } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { useStore } from "../../store/useStore";
-import { VoiceRecognition } from "../../components/VoiceRecognition";
+import { VoiceRecognition, LangMode } from "../../components/VoiceRecognition";
 import { Message } from "../../types";
 
 export const HistoryTab: React.FC = () => {
@@ -27,6 +27,7 @@ export const HistoryTab: React.FC = () => {
   } = useStore();
   
   const [inputText, setInputText] = useState("");
+  const [langMode, setLangMode] = useState<LangMode>("auto");
   const [isTyping, setIsTyping] = useState(false);
   const [sessionQuestions, setSessionQuestions] = useState<any[]>([]);
   const [askedCount, setAskedCount] = useState<number>(0);
@@ -829,14 +830,44 @@ export const HistoryTab: React.FC = () => {
                  </span>
 
                  <div className="flex items-center gap-1.5 bg-slate-100 p-0.5 rounded-lg border border-slate-200">
-                    <VoiceRecognition 
+                    <VoiceRecognition langMode={langMode} onLangModeChange={setLangMode} hideSelector={true} 
                       onTranscript={(text) => setInputText(prev => prev + (prev ? " " : "") + text)} 
                       disabled={isTyping}
                     />
                     <div className="h-4 w-px bg-slate-300 mx-0.5"></div>
-                    <button className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-white text-blue-600 shadow-xs border border-slate-200 uppercase">Auto</button>
-                    <button className="text-[9px] font-bold px-1.5 py-0.5 rounded-md text-slate-500 hover:text-slate-800 uppercase">Arabic</button>
-                    <button className="text-[9px] font-bold px-1.5 py-0.5 rounded-md text-slate-500 hover:text-slate-800 uppercase">English</button>
+                    <button 
+                      type="button"
+                      onClick={() => setLangMode("auto")}
+                      className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md transition-all uppercase cursor-pointer border-none ${
+                        langMode === "auto" 
+                          ? "bg-white text-blue-600 shadow-xs border border-slate-200" 
+                          : "text-slate-500 hover:text-slate-800 bg-transparent"
+                      }`}
+                    >
+                      Auto
+                    </button>
+                    <button 
+                      type="button"
+                      onClick={() => setLangMode("ar-EG")}
+                      className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md transition-all uppercase cursor-pointer border-none ${
+                        langMode === "ar-EG" 
+                          ? "bg-white text-blue-600 shadow-xs border border-slate-200" 
+                          : "text-slate-500 hover:text-slate-800 bg-transparent"
+                      }`}
+                    >
+                      Arabic
+                    </button>
+                    <button 
+                      type="button"
+                      onClick={() => setLangMode("en-US")}
+                      className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md transition-all uppercase cursor-pointer border-none ${
+                        langMode === "en-US" 
+                          ? "bg-white text-blue-600 shadow-xs border border-slate-200" 
+                          : "text-slate-500 hover:text-slate-800 bg-transparent"
+                      }`}
+                    >
+                      English
+                    </button>
                  </div>
 
                  {/* Compact integrated "Ask From File" inside Examiner tab */}

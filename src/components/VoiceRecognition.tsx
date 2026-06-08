@@ -2,16 +2,29 @@ import React, { useState, useEffect, useRef } from "react";
 import { Mic, MicOff, AlertCircle, X } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
+export type LangMode = "auto" | "ar-EG" | "en-US";
+
 interface VoiceRecognitionProps {
   onTranscript: (text: string) => void;
   disabled?: boolean;
+  langMode?: LangMode;
+  onLangModeChange?: (mode: LangMode) => void;
+  hideSelector?: boolean;
 }
 
-type LangMode = "auto" | "ar-EG" | "en-US";
-
-export const VoiceRecognition: React.FC<VoiceRecognitionProps> = ({ onTranscript, disabled }) => {
+export const VoiceRecognition: React.FC<VoiceRecognitionProps> = ({ 
+  onTranscript, 
+  disabled,
+  langMode: parentLangMode,
+  onLangModeChange,
+  hideSelector = false
+}) => {
   const [isRecording, setIsRecording] = useState(false);
-  const [langMode, setLangMode] = useState<LangMode>("auto");
+  const [internalLangMode, setInternalLangMode] = useState<LangMode>("auto");
+  
+  const langMode = parentLangMode !== undefined ? parentLangMode : internalLangMode;
+  const setLangMode = onLangModeChange !== undefined ? onLangModeChange : setInternalLangMode;
+  
   const [error, setError] = useState<string | null>(null);
   const [supported, setSupported] = useState(true);
   
@@ -108,20 +121,22 @@ export const VoiceRecognition: React.FC<VoiceRecognitionProps> = ({ onTranscript
 
   return (
     <div className="flex items-center gap-2 relative">
-      <div className="hidden sm:flex bg-slate-100 p-1 rounded-xl text-[10px] shrink-0">
-        {(["auto", "ar-EG", "en-US"] as LangMode[]).map((mode) => (
-          <button
-            key={mode}
-            type="button"
-            onClick={() => setLangMode(mode)}
-            className={`px-2 py-1 rounded-lg font-bold transition-all ${
-              langMode === mode ? "bg-white text-blue-600 shadow-xs" : "text-slate-400 hover:text-slate-600"
-            }`}
-          >
-            {mode === "auto" ? "Auto" : mode === "ar-EG" ? "عربي" : "EN"}
-          </button>
-        ))}
-      </div>
+      {!hideSelector && (
+        <div className="hidden sm:flex bg-slate-100 p-1 rounded-xl text-[10px] shrink-0">
+          {(["auto", "ar-EG", "en-US"] as LangMode[]).map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => setLangMode(mode)}
+              className={`px-2 py-1 rounded-lg font-bold transition-all ${
+                langMode === mode ? "bg-white text-blue-600 shadow-xs" : "text-slate-400 hover:text-slate-600"
+              }`}
+            >
+              {mode === "auto" ? "Auto" : mode === "ar-EG" ? "عربي" : "EN"}
+            </button>
+          ))}
+        </div>
+      )}
 
       <button
         onClick={toggleRecording}
