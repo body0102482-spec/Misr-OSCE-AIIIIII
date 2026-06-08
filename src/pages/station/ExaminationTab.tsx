@@ -617,10 +617,20 @@ export const ExaminationTab: React.FC = () => {
               {/* Chat Input & skip actions */}
               {!isActiveStepResolved ? (
                 <form onSubmit={handleSubmit} className="space-y-3">
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
-                       <Sparkles size={11} className="text-blue-500" /> Clinical Observation Input
-                    </span>
+                  <div className="flex flex-wrap items-center justify-between gap-y-2 border-b border-slate-100 pb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                         <Sparkles size={11} className="text-blue-500" /> Clinical Observation Input
+                      </span>
+                      
+                      {/* Unified Speaking Button located here, beautifully styled and separated */}
+                      <div className="shrink-0 scale-90 sm:scale-95 origin-left">
+                        <VoiceRecognition 
+                          onTranscript={(text) => setInputValue(prev => prev + (prev ? " " : "") + text)} 
+                          disabled={isLoading}
+                        />
+                      </div>
+                    </div>
                     <span className="hidden sm:flex text-[10px] font-black text-slate-400 uppercase tracking-widest items-center gap-1.5">
                        <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></div>
                        Viva Engine Active
@@ -632,17 +642,11 @@ export const ExaminationTab: React.FC = () => {
                       type="text"
                       value={inputValue}
                       onChange={(e) => setInputValue(e.target.value)}
-                      placeholder="Type or speak your clinical observation e.g. 'I note bilateral pitting edema'..."
+                      placeholder="Type your clinical observation e.g. 'I note bilateral pitting edema'..."
                       disabled={isLoading}
                       style={{ fontSize: "16px" }}
                       className="flex-1 bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3.5 text-[16px] text-slate-800 font-semibold placeholder:text-slate-400 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-50 outline-none transition-all"
                     />
-                    <div className="shrink-0 flex items-center">
-                      <VoiceRecognition 
-                        onTranscript={(text) => setInputValue(prev => prev + (prev ? " " : "") + text)} 
-                        disabled={isLoading}
-                      />
-                    </div>
                     <button
                       type="submit"
                       id="send-step-btn"

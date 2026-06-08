@@ -822,27 +822,31 @@ export const HistoryTab: React.FC = () => {
       {/* Unified Input Control */}
       <div className="relative bg-white border-t border-slate-200 p-4 md:p-5 shrink-0 shadow-[0_-4px_16px_rgba(0,0,0,0.06)] w-full z-10">
         <div className="max-w-4xl mx-auto flex flex-col gap-3">
-           <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-              <div className="flex items-center gap-2 xs:gap-3">
+           <div className="flex flex-wrap items-center justify-between gap-y-2 border-b border-slate-100 pb-2">
+              <div className="flex flex-wrap items-center gap-2 xs:gap-3">
                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
                     <Activity size={12} className="text-blue-500" /> Options
                  </span>
+
+                 {/* Unified Speaking Button located here, beautifully styled and separated */}
+                 <div className="shrink-0 scale-90 sm:scale-95 origin-left">
+                   <VoiceRecognition 
+                     onTranscript={(text) => setInputText(prev => prev + (prev ? " " : "") + text)} 
+                     disabled={isTyping}
+                   />
+                 </div>
                  
-
-                 
-
-
-
                  {/* Compact integrated "Ask From File" next to speaker icon in Examiner tab */}
                  {chatTarget === "examiner" && (
                    <button
                      type="button"
                      onClick={() => triggerNextQuestion()}
                      disabled={!currentCase?.examinerQuestions || currentCase.examinerQuestions.length === 0}
-                     className="bg-amber-500 hover:bg-amber-600 hover:scale-105 active:scale-95 text-slate-950 p-2 rounded-full transition-all shadow-sm flex items-center justify-center shrink-0 disabled:opacity-50 cursor-pointer border-none"
+                     className="bg-amber-500 hover:bg-amber-600 hover:scale-105 active:scale-95 text-slate-150 px-2.5 py-1.5 rounded-xl transition-all shadow-sm flex items-center justify-center gap-1 shrink-0 disabled:opacity-50 cursor-pointer border-none font-sans text-[10px] font-bold text-slate-950"
                      title="Ask question from file"
                    >
-                     <BookOpen size={14} strokeWidth={2.5} />
+                     <BookOpen size={12} strokeWidth={2.5} />
+                     <span>Ask Prep Question</span>
                    </button>
                  )}
               </div>
@@ -865,12 +869,6 @@ export const HistoryTab: React.FC = () => {
                 style={{ fontSize: "16px" }}
                 disabled={isTyping}
               />
-              <div className="shrink-0">
-                <VoiceRecognition 
-                  onTranscript={(text) => setInputText(prev => prev + (prev ? " " : "") + text)} 
-                  disabled={isTyping}
-                />
-              </div>
               <button
                 onClick={() => handleSendMessage(inputText)}
                 disabled={!inputText.trim() || isTyping}
