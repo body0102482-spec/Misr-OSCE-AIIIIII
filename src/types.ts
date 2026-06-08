@@ -86,6 +86,7 @@ export interface User {
   planExpiresAt?: number;
   planActivatedAt?: number;
   startedCases?: string[];
+  token?: string;
 }
 
 export interface PaymentSubmission {

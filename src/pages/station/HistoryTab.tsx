@@ -22,7 +22,8 @@ export const HistoryTab: React.FC = () => {
     addAskedQuestionId,
     addVivaAttempt,
     quotaExceeded,
-    setQuotaExceeded
+    setQuotaExceeded,
+    currentUser
   } = useStore();
   
   const [inputText, setInputText] = useState("");
@@ -417,7 +418,10 @@ export const HistoryTab: React.FC = () => {
       try {
         const response = await fetch("/api/chat", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { 
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + (currentUser?.token || "")
+          },
           body: JSON.stringify({
             studentQuestion: text,
             chatHistory: messages.slice(-8).map(m => `${m.role === "student" ? "Student" : "Patient"}: ${m.content}`).join("\n"),
@@ -452,7 +456,10 @@ export const HistoryTab: React.FC = () => {
 
         const response = await fetch("/api/examiner", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { 
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + (currentUser?.token || "")
+          },
           body: JSON.stringify({
             studentMessage: text,
             examinerHistory: examinerMessages.slice(-6).map(m => `${m.role === "student" ? "Student" : "Examiner"}: ${m.content}`).join("\n"),

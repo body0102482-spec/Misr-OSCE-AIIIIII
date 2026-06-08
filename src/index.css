@@ -55,3 +55,10 @@
 .shadow-card {
   box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.02);
 }
+
+/* Prevent iOS Safari and Chrome auto zoom on input focus on smaller devices */
+@media screen and (max-width: 767px) {
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+}

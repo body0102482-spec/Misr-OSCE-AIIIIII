@@ -39,7 +39,9 @@ export const AuthPage: React.FC = () => {
   const [regPassword, setRegPassword] = useState("");
   const [regConfirmPassword, setRegConfirmPassword] = useState("");
 
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
@@ -48,15 +50,22 @@ export const AuthPage: React.FC = () => {
       return;
     }
 
-    const res = loginUser(loginEmail, loginPassword, rememberMe);
-    if (res.success) {
-      navigate("/");
-    } else {
-      setError(res.error || "Invalid email or password.");
+    setIsLoading(true);
+    try {
+      const res = await loginUser(loginEmail, loginPassword, rememberMe);
+      if (res.success) {
+        navigate("/");
+      } else {
+        setError(res.error || "Invalid email or password.");
+      }
+    } catch (err) {
+      setError("An unexpected authentication error occurred.");
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handleRegisterSubmit = (e: React.FormEvent) => {
+  const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
@@ -92,14 +101,21 @@ export const AuthPage: React.FC = () => {
       isActivated: true
     };
 
-    const res = registerUser(newUserObj, regPassword);
-    if (res.success) {
-      setIsLogin(true);
-      setError("Registration successful! Please login with your new credentials.");
-      setLoginEmail(regEmail);
-      setLoginPassword(regPassword);
-    } else {
-      setError(res.error || "Registration failed. Email might already exist.");
+    setIsLoading(true);
+    try {
+      const res = await registerUser(newUserObj, regPassword);
+      if (res.success) {
+        setIsLogin(true);
+        setError("Registration successful! Please login with your new credentials.");
+        setLoginEmail(regEmail);
+        setLoginPassword(regPassword);
+      } else {
+        setError(res.error || "Registration failed. Email might already exist.");
+      }
+    } catch (err) {
+      setError("An unexpected registration error occurred.");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -377,10 +393,20 @@ export const AuthPage: React.FC = () => {
 
             <button
               type="submit"
-              className="w-full py-4 px-6 bg-slate-900 border border-slate-850 hover:bg-slate-800 text-white rounded-2xl text-sm font-bold flex items-center justify-center gap-2 shadow-xl shadow-slate-100 transition-all hover:-translate-y-0.5 active:translate-y-0 cursor-pointer"
+              disabled={isLoading}
+              className="w-full py-4 px-6 bg-slate-900 border border-slate-850 hover:bg-slate-800 disabled:bg-slate-700 text-white rounded-2xl text-sm font-bold flex items-center justify-center gap-2 shadow-xl shadow-slate-100 transition-all hover:-translate-y-0.5 active:translate-y-0 cursor-pointer"
             >
-              {isLogin ? "Authenticate Account" : "Submit Student Application"}
-              <ArrowRight size={18} />
+              {isLoading ? (
+                <>
+                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                  Please wait...
+                </>
+              ) : (
+                <>
+                  {isLogin ? "Authenticate Account" : "Submit Student Application"}
+                  <ArrowRight size={18} />
+                </>
+              )}
             </button>
           </form>
 

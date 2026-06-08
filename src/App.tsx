@@ -8,7 +8,13 @@ import { StudentDashboard } from "./pages/StudentDashboard";
 import { useStore } from "./store/useStore";
 
 export default function App() {
-  const { currentUser } = useStore();
+  const { currentUser, syncUser } = useStore();
+
+  React.useEffect(() => {
+    if (currentUser) {
+      syncUser();
+    }
+  }, []);
 
   return (
     <BrowserRouter>

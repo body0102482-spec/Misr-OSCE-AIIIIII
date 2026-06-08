@@ -62,12 +62,15 @@ export const StudentDashboard: React.FC = () => {
     submitPayment,
     verifyPayment,
     addCase,
-    editCase
+    editCase,
+    fetchAdminStats
   } = useStore();
 
   useEffect(() => {
     if (!currentUser) {
       navigate("/auth");
+    } else if (currentUser.isAdmin) {
+      fetchAdminStats();
     }
   }, [currentUser]);
 
@@ -89,6 +92,12 @@ export const StudentDashboard: React.FC = () => {
   // Admin section
   const [isAdminView, setIsAdminView] = useState(false);
   const [adminTab, setAdminTab] = useState<"students" | "payments" | "stations">("students");
+
+  useEffect(() => {
+    if (currentUser?.isAdmin && isAdminView) {
+      fetchAdminStats();
+    }
+  }, [isAdminView]);
 
   // Admin dynamic case creator state
   const [editingCaseObj, setEditingCaseObj] = useState<any | null>(null);
@@ -474,14 +483,14 @@ export const StudentDashboard: React.FC = () => {
     navigate("/station");
   };
 
-  const handleApplyPayment = (e: React.FormEvent) => {
+  const handleApplyPayment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!senderMobile || !transactionId) {
       alert("Please key in your sender mobile and transaction ID.");
       return;
     }
 
-    submitPayment({
+    const res = await submitPayment({
       studentEmail: currentUser.email,
       studentName: currentUser.fullName,
       mobile: senderMobile,
@@ -492,12 +501,15 @@ export const StudentDashboard: React.FC = () => {
       transactionId: transactionId
     });
 
-    setPaymentSuccessMessage(`Your activation request for ${paymentPlanRequested} has been submitted! Our automated bank registrar is validating the Transaction ID: ${transactionId}. You can instantly approve it using the Admin Dashboard at the top header!`);
-    
-    // Clear fields
-    setSenderMobile("");
-    setTransactionId("");
-    setScreenshotNote("");
+    if (res.success) {
+      setPaymentSuccessMessage(`Your activation request for ${paymentPlanRequested} has been submitted! Our automated bank registrar is validating the Transaction ID: ${transactionId}. You can instantly approve it using the Admin Dashboard at the top header!`);
+      // Clear fields
+      setSenderMobile("");
+      setTransactionId("");
+      setScreenshotNote("");
+    } else {
+      alert(res.error || "Failed to submit payment submission ticket.");
+    }
   };
 
   // Categories helper

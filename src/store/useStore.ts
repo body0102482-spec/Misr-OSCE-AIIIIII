@@ -65,13 +65,15 @@ interface OSCEState {
 
   // New Auth & Admin Actions
   setCurrentUser: (u: User | null) => void;
-  loginUser: (email: string, pass: string, remember: boolean) => { success: boolean; error?: string };
-  registerUser: (user: User, pass: string) => { success: boolean; error?: string };
+  loginUser: (email: string, pass: string, remember: boolean) => Promise<{ success: boolean; error?: string }>;
+  registerUser: (user: User, pass: string) => Promise<{ success: boolean; error?: string }>;
   logoutUser: () => void;
-  submitPayment: (p: Omit<PaymentSubmission, "id" | "timestamp" | "status">) => void;
-  verifyPayment: (id: string, status: "Approved" | "Declined") => void;
+  submitPayment: (p: Omit<PaymentSubmission, "id" | "timestamp" | "status">) => Promise<{ success: boolean; error?: string }>;
+  verifyPayment: (id: string, status: "Approved" | "Declined") => Promise<{ success: boolean; error?: string }>;
   addCase: (c: Case) => void;
   editCase: (c: Case) => void;
+  syncUser: () => Promise<void>;
+  fetchAdminStats: () => Promise<void>;
 }
 
 // Initial seed helper
@@ -298,136 +300,158 @@ export const useStore = create<OSCEState>((set, get) => ({
     }
   },
 
-  loginUser: (email, password, remember) => {
-    const cleanEmail = email.trim().toLowerCase();
-    const passwordsStr = localStorage.getItem("osce-passwords") || "{}";
-    const passwords = JSON.parse(passwordsStr);
+  loginUser: async (email, password, remember) => {
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password })
+      });
 
-    if (!passwords[cleanEmail] || passwords[cleanEmail] !== password) {
-      return { success: false, error: "Incorrect email or password combination." };
+      if (!res.ok) {
+        const errorData = await res.json();
+        return { success: false, error: errorData.error || "Incorrect email or password combination." };
+      }
+
+      const data = await res.json();
+      if (data.success && data.user) {
+        const loggedUser = { ...data.user, token: data.token };
+        get().setCurrentUser(loggedUser);
+        
+        // Save in temporary login passwords cache (for compatibility/remember settings)
+        const passwordsStr = localStorage.getItem("osce-passwords") || "{}";
+        const passwords = JSON.parse(passwordsStr);
+        passwords[email.trim().toLowerCase()] = password;
+        localStorage.setItem("osce-passwords", JSON.stringify(passwords));
+
+        // Sync fresh server stats if user is admin
+        if (loggedUser.isAdmin) {
+          await get().fetchAdminStats();
+        }
+
+        return { success: true };
+      }
+      return { success: false, error: "Communication protocol validation error." };
+    } catch (e: any) {
+      return { success: false, error: "Network connection is down. Cannot authenticate." };
     }
-
-    const matchedUser = get().usersList.find((u) => u.email.toLowerCase() === cleanEmail);
-    if (!matchedUser) {
-      return { success: false, error: "User account could not be resolved." };
-    }
-
-    get().setCurrentUser(matchedUser);
-    return { success: true };
   },
 
-  registerUser: (newUser, password) => {
-    const cleanEmail = newUser.email.trim().toLowerCase();
-    const users = get().usersList;
+  registerUser: async (newUser, password) => {
+    try {
+      const res = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ newUser, password })
+      });
 
-    if (users.some((u) => u.email.toLowerCase() === cleanEmail)) {
-      return { success: false, error: "An account has already registered with this email address." };
+      if (!res.ok) {
+        const errorData = await res.json();
+        return { success: false, error: errorData.error || "Registration failed on server." };
+      }
+
+      const data = await res.json();
+      if (data.success && data.user) {
+        // Automatically save to local password caches
+        const passwordsStr = localStorage.getItem("osce-passwords") || "{}";
+        const passwords = JSON.parse(passwordsStr);
+        passwords[newUser.email.trim().toLowerCase()] = password;
+        localStorage.setItem("osce-passwords", JSON.stringify(passwords));
+
+        get().setCurrentUser({ ...data.user, token: data.token });
+        return { success: true };
+      }
+      return { success: false, error: "Communication protocol registration error." };
+    } catch (e: any) {
+      return { success: false, error: "Network error. Failed to reach server during registration." };
     }
-
-    const updatedUsers = [...users, { ...newUser, email: cleanEmail }];
-    set({ usersList: updatedUsers });
-    localStorage.setItem("osce-users", JSON.stringify(updatedUsers));
-
-    const passwordsStr = localStorage.getItem("osce-passwords") || "{}";
-    const passwords = JSON.parse(passwordsStr);
-    passwords[cleanEmail] = password;
-    localStorage.setItem("osce-passwords", JSON.stringify(passwords));
-
-    get().setCurrentUser(newUser);
-    return { success: true };
   },
 
   logoutUser: () => {
     get().setCurrentUser(null);
   },
 
-  submitPayment: (p) => {
-    const payments = get().paymentsList;
-    const newPay: PaymentSubmission = {
-      ...p,
-      id: `pay-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-      timestamp: Date.now(),
-      status: "Pending"
-    };
+  submitPayment: async (p) => {
+    const user = get().currentUser;
+    if (!user || !user.token) {
+      return { success: false, error: "Session authentication required to submit payments." };
+    }
 
-    const updatedPayments = [newPay, ...payments];
-    set({ paymentsList: updatedPayments });
-    localStorage.setItem("osce-payments", JSON.stringify(updatedPayments));
+    try {
+      const res = await fetch("/api/auth/submit-payment", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${user.token}`
+        },
+        body: JSON.stringify({ payment: p })
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        return { success: false, error: errData.error || "Payment record creation failed on server." };
+      }
+
+      const data = await res.json();
+      if (data.success) {
+        set({ paymentsList: data.payments });
+        localStorage.setItem("osce-payments", JSON.stringify(data.payments));
+        return { success: true };
+      }
+      return { success: false, error: "Unexpected database feedback code." };
+    } catch (err: any) {
+      return { success: false, error: "Offline. Failed to send transaction ticket to the server." };
+    }
   },
 
-  verifyPayment: (id, status) => {
-    const payments = get().paymentsList.map((p) => {
-      if (p.id === id) {
-        return { ...p, status };
+  verifyPayment: async (id, status) => {
+    const user = get().currentUser;
+    if (!user || !user.token) {
+      return { success: false, error: "Admin login session is required." };
+    }
+
+    try {
+      const res = await fetch("/api/admin/verify-payment", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${user.token}`
+        },
+        body: JSON.stringify({ paymentId: id, status })
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        return { success: false, error: errData.error || "Payment approval failed on server." };
       }
-      return p;
-    });
 
-    set({ paymentsList: payments });
-    localStorage.setItem("osce-payments", JSON.stringify(payments));
+      const data = await res.json();
+      if (data.success) {
+        set({ paymentsList: data.payments, usersList: data.users });
+        localStorage.setItem("osce-payments", JSON.stringify(data.payments));
+        localStorage.setItem("osce-users", JSON.stringify(data.users));
 
-    // If approved, update user subscription plan with credits and expiry dates
-    if (status === "Approved") {
-      const matchPay = payments.find((p) => p.id === id);
-      if (matchPay) {
-        // Calculate credits and expiry duration
-        let planCredits = 0;
-        let validityMs = 0;
-        if (matchPay.plan === "BASIC PLAN") {
-          planCredits = 75;
-          validityMs = 2 * 30 * 24 * 3600 * 1000;
-        } else if (matchPay.plan === "PRO PLAN") {
-          planCredits = 200;
-          validityMs = 4 * 30 * 24 * 3600 * 1000;
-        } else if (matchPay.plan === "PREMIUM PLAN") {
-          planCredits = 400;
-          validityMs = 6 * 30 * 24 * 3600 * 1000;
-        }
-
-        const now = Date.now();
-        const planExpiresAt = now + validityMs;
-
-        const users = get().usersList.map((u) => {
-          if (u.email.toLowerCase() === matchPay.studentEmail.toLowerCase()) {
-            return { 
-              ...u, 
-              plan: matchPay.plan,
-              credits: planCredits,
-              planActivatedAt: now,
-              planExpiresAt: planExpiresAt,
-              startedCases: u.startedCases || []
-            };
+        // If the current student is the verified user, sync plan on screen immediately
+        const matchPay = data.payments.find((p: any) => p.id === id);
+        if (matchPay && user.email.toLowerCase() === matchPay.studentEmail.toLowerCase()) {
+          const freshUserObj = data.users.find((u: any) => u.email.toLowerCase() === user.email.toLowerCase());
+          if (freshUserObj) {
+            get().setCurrentUser({ ...freshUserObj, token: user.token });
           }
-          return u;
-        });
-
-        set({ usersList: users });
-        localStorage.setItem("osce-users", JSON.stringify(users));
-
-        // If active user is the one getting approved, sync their session plan
-        const active = get().currentUser;
-        if (active && active.email.toLowerCase() === matchPay.studentEmail.toLowerCase()) {
-          const updatedActive = { 
-            ...active, 
-            plan: matchPay.plan,
-            credits: planCredits,
-            planActivatedAt: now,
-            planExpiresAt: planExpiresAt,
-            startedCases: active.startedCases || []
-          };
-          get().setCurrentUser(updatedActive);
         }
+        return { success: true };
       }
+      return { success: false, error: "Unexpected verification payload." };
+    } catch (err: any) {
+      return { success: false, error: "Offline. Failed to contact verification API." };
     }
   },
 
   addCase: (newCase) => {
-    // Add dynamically
     const casesOverrideStr = localStorage.getItem("osce-custom-cases") || "[]";
     const casesOverride = JSON.parse(casesOverrideStr);
     const updated = [...casesOverride, newCase];
     localStorage.setItem("osce-custom-cases", JSON.stringify(updated));
-    // Trigger list update if necessary
   },
 
   editCase: (updatedCase) => {
@@ -436,5 +460,48 @@ export const useStore = create<OSCEState>((set, get) => ({
     const filtered = casesOverride.filter((c: Case) => c.id !== updatedCase.id);
     const updated = [...filtered, updatedCase];
     localStorage.setItem("osce-custom-cases", JSON.stringify(updated));
+  },
+
+  syncUser: async () => {
+    const user = get().currentUser;
+    if (user && user.token) {
+      try {
+        const res = await fetch("/api/auth/me", {
+          headers: { "Authorization": `Bearer ${user.token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && data.user) {
+            get().setCurrentUser({ ...data.user, token: data.token });
+          }
+        } else if (res.status === 401) {
+          // Token is dead or tampered, clear session
+          get().logoutUser();
+        }
+      } catch (err) {
+        console.error("Session sync failed:", err);
+      }
+    }
+  },
+
+  fetchAdminStats: async () => {
+    const user = get().currentUser;
+    if (user && user.isAdmin && user.token) {
+      try {
+        const res = await fetch("/api/admin/system-stats", {
+          headers: { "Authorization": `Bearer ${user.token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success) {
+            set({ usersList: data.users, paymentsList: data.payments });
+            localStorage.setItem("osce-users", JSON.stringify(data.users));
+            localStorage.setItem("osce-payments", JSON.stringify(data.payments));
+          }
+        }
+      } catch (err) {
+        console.error("Admin stats fetch failed:", err);
+      }
+    }
   }
 }));

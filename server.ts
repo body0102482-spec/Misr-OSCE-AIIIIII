@@ -3,6 +3,8 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, ThinkingLevel } from "@google/genai";
 import dotenv from "dotenv";
+import crypto from "crypto";
+import fs from "fs";
 
 dotenv.config();
 
@@ -17,6 +19,182 @@ const ai = new GoogleGenAI({
     }
   }
 });
+
+// JSON File Database Persistence
+const DB_PATH = path.join(process.cwd(), "src", "data", "server_db.json");
+
+function loadDB() {
+  const defaultUsers = [
+    {
+      fullName: "Mahmoud Nasser",
+      studentId: "MUST-2024-819",
+      university: "Misr University for Science and Technology (MUST)",
+      mobile: "01024828652",
+      email: "student@must.edu.eg",
+      plan: "BASIC PLAN",
+      isAdmin: false,
+      isActivated: true,
+      credits: 10,
+      planExpiresAt: Date.now() + 60 * 24 * 3600 * 1000,
+      planActivatedAt: Date.now(),
+      startedCases: []
+    },
+    {
+      fullName: "Mariam El-Sawy",
+      studentId: "MUST-2023-452",
+      university: "Misr University for Science and Technology (MUST)",
+      mobile: "01024828652",
+      email: "mariam@must.edu.eg",
+      plan: "BASIC PLAN",
+      isAdmin: false,
+      isActivated: true,
+      credits: 75,
+      planExpiresAt: Date.now() + 60 * 24 * 3600 * 1000,
+      planActivatedAt: Date.now(),
+      startedCases: []
+    },
+    {
+      fullName: "Admin Mahmoud",
+      studentId: "ADMIN-98302",
+      university: "Misr University for Science and Technology (MUST)",
+      mobile: "01024328652",
+      email: "mahmoud98302",
+      plan: "PREMIUM PLAN",
+      isAdmin: true,
+      isActivated: true,
+      credits: 99999,
+      planExpiresAt: Date.now() + 3650 * 24 * 3600 * 1000,
+      planActivatedAt: Date.now(),
+      startedCases: []
+    }
+  ];
+
+  const defaultPasswords = {
+    "student@must.edu.eg": "student123",
+    "mariam@must.edu.eg": "mariam123",
+    "mahmoud98302": "Vet20202025"
+  };
+
+  const defaultPayments = [
+    {
+      id: "pay-1",
+      studentEmail: "mariam@must.edu.eg",
+      studentName: "Mariam El-Sawy",
+      mobile: "01024828652",
+      plan: "BASIC PLAN",
+      amount: 150,
+      method: "Vodafone Cash",
+      screenshotText: "Screenshot: Transfer of 150 EGP verified via Vodafone Cash SMS receipts.",
+      transactionId: "TXN98124921",
+      timestamp: Date.now() - 24 * 3600 * 1000,
+      status: "Approved"
+    },
+    {
+      id: "pay-2",
+      studentEmail: "student@must.edu.eg",
+      studentName: "Mahmoud Nasser",
+      mobile: "01024828652",
+      plan: "PREMIUM PLAN",
+      amount: 300,
+      method: "InstaPay",
+      screenshotText: "Screenshot: Transfer of 300 EGP to digital address MUST_OSCE@instapay.",
+      transactionId: "IPY88231940",
+      timestamp: Date.now() - 2 * 3600 * 1000,
+      status: "Pending"
+    }
+  ];
+
+  try {
+    if (!fs.existsSync(DB_PATH)) {
+      const parentDir = path.dirname(DB_PATH);
+      if (!fs.existsSync(parentDir)) {
+        fs.mkdirSync(parentDir, { recursive: true });
+      }
+      fs.writeFileSync(
+        DB_PATH,
+        JSON.stringify({ users: defaultUsers, passwords: defaultPasswords, payments: defaultPayments }, null, 2)
+      );
+    }
+    const content = fs.readFileSync(DB_PATH, "utf-8");
+    return JSON.parse(content);
+  } catch (error) {
+    console.error("Error loading server database, using seeds:", error);
+    return { users: defaultUsers, passwords: defaultPasswords, payments: defaultPayments };
+  }
+}
+
+function saveDB(db: any) {
+  try {
+    const parentDir = path.dirname(DB_PATH);
+    if (!fs.existsSync(parentDir)) {
+      fs.mkdirSync(parentDir, { recursive: true });
+    }
+    fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
+  } catch (error) {
+    console.error("Error saving server database:", error);
+  }
+}
+
+// Cryptographic Security Tokens
+const JWT_SECRET = process.env.JWT_SECRET || "must_osce_mentor_secret_key_2026_change_me_in_production";
+
+function signToken(payload: any): string {
+  const header = { alg: "HS256", typ: "JWT" };
+  const encodedHeader = Buffer.from(JSON.stringify(header)).toString("base64url");
+  const encodedPayload = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  
+  const signature = crypto
+    .createHmac("sha256", JWT_SECRET)
+    .update(`${encodedHeader}.${encodedPayload}`)
+    .digest("base64url");
+    
+  return `${encodedHeader}.${encodedPayload}.${signature}`;
+}
+
+function verifyToken(token: string): any | null {
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) return null;
+    
+    const [encodedHeader, encodedPayload, signature] = parts;
+    const expectedSignature = crypto
+      .createHmac("sha256", JWT_SECRET)
+      .update(`${encodedHeader}.${encodedPayload}`)
+      .digest("base64url");
+      
+    if (signature !== expectedSignature) return null;
+    
+    const payloadStr = Buffer.from(encodedPayload, "base64url").toString("utf8");
+    return JSON.parse(payloadStr);
+  } catch (error) {
+    return null;
+  }
+}
+
+// Security Middleware checking headers for Authorization Bearer Token
+function authMiddleware(req: any, res: any, next: any) {
+  const authHeader = req.headers["authorization"] || req.headers["Authorization"];
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return res.status(401).json({ error: "Access denied. Valid Authorization Bearer JWT Token is required." });
+  }
+  const token = authHeader.substring(7);
+  const payload = verifyToken(token);
+  if (!payload) {
+    return res.status(401).json({ error: "Invalid, expired, or tampered cryptographic authorization signature." });
+  }
+  req.user = payload;
+  next();
+}
+
+function adminMiddleware(req: any, res: any, next: any) {
+  authMiddleware(req, res, () => {
+    if (!req.user.isAdmin) {
+      return res.status(403).json({ error: "Access restricted. Administrative level authority required." });
+    }
+    next();
+  });
+}
+
 
 // AI Prompt Templates
 const PATIENT_PROMPT = `
@@ -178,8 +356,240 @@ Return your response strictly in the following JSON format:
 }
 `;
 
+// Authentication, Synchronization and Licensing Server API Engine
+app.post("/api/auth/register", (req, res) => {
+  const { newUser, password } = req.body;
+  if (!newUser || !newUser.email || !password) {
+    return res.status(400).json({ error: "Email, password, and profile values are required." });
+  }
+
+  const db = loadDB();
+  const cleanEmail = newUser.email.trim().toLowerCase();
+
+  const userExists = db.users.some((u: any) => u.email.toLowerCase() === cleanEmail);
+  if (userExists) {
+    return res.status(400).json({ error: "An account has already registered with this email address." });
+  }
+
+  // Force Mahmoud to be admin, everyone else registered starts as FREE PLAN
+  const isMahmoud = cleanEmail === "mahmoud98302";
+  const plan = isMahmoud ? "PREMIUM PLAN" : ("FREE PLAN" as const);
+  const credits = isMahmoud ? 99999 : 0;
+  const isAdmin = isMahmoud;
+
+  const finalizedUser = {
+    ...newUser,
+    email: cleanEmail,
+    plan,
+    credits,
+    isAdmin,
+    isActivated: true,
+    startedCases: [],
+    planActivatedAt: Date.now(),
+    planExpiresAt: isMahmoud ? Date.now() + 3650 * 24 * 3600 * 1000 : 0
+  };
+
+  db.users.push(finalizedUser);
+  db.passwords[cleanEmail] = password;
+  saveDB(db);
+
+  const token = signToken(finalizedUser);
+  res.json({ success: true, user: finalizedUser, token });
+});
+
+app.post("/api/auth/login", (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password) {
+    return res.status(400).json({ error: "Email and password are required." });
+  }
+
+  const db = loadDB();
+  const cleanEmail = email.trim().toLowerCase();
+
+  const savedPass = db.passwords[cleanEmail];
+  if (!savedPass || savedPass !== password) {
+    return res.status(400).json({ error: "Incorrect email or password combination." });
+  }
+
+  const user = db.users.find((u: any) => u.email.toLowerCase() === cleanEmail);
+  if (!user) {
+    return res.status(500).json({ error: "User record consistency failure. Please contact Admin." });
+  }
+
+  const token = signToken(user);
+  res.json({ success: true, user, token });
+});
+
+app.get("/api/auth/me", authMiddleware, (req: any, res) => {
+  const db = loadDB();
+  const cleanEmail = req.user.email.toLowerCase();
+  const user = db.users.find((u: any) => u.email.toLowerCase() === cleanEmail);
+  if (!user) {
+    return res.status(404).json({ error: "User session not found on server database." });
+  }
+  const token = signToken(user); // Send refreshed token
+  res.json({ success: true, user, token });
+});
+
+app.get("/api/admin/system-stats", adminMiddleware, (req, res) => {
+  const db = loadDB();
+  res.json({
+    success: true,
+    users: db.users,
+    payments: db.payments
+  });
+});
+
+app.post("/api/auth/submit-payment", authMiddleware, (req: any, res) => {
+  const { payment } = req.body;
+  if (!payment) {
+    return res.status(400).json({ error: "Payment submission body is required." });
+  }
+
+  const db = loadDB();
+  const newPayment = {
+    ...payment,
+    id: "pay-" + Date.now(),
+    timestamp: Date.now(),
+    status: "Pending"
+  };
+
+  db.payments.push(newPayment);
+  saveDB(db);
+
+  res.json({ success: true, payments: db.payments });
+});
+
+app.post("/api/admin/verify-payment", adminMiddleware, (req, res) => {
+  const { paymentId, status } = req.body;
+  if (!paymentId || !status) {
+    return res.status(400).json({ error: "Payment identification details and status required." });
+  }
+
+  const db = loadDB();
+  const payment = db.payments.find((p: any) => p.id === paymentId);
+  if (!payment) {
+    return res.status(444).json({ error: "Transaction ticket reference not found." });
+  }
+
+  payment.status = status;
+
+  if (status === "Approved") {
+    const studentEmail = payment.studentEmail.toLowerCase();
+    const planName = payment.plan;
+
+    let planCredits = 0;
+    let validityMs = 0;
+    if (planName === "BASIC PLAN") {
+      planCredits = 75;
+      validityMs = 2 * 30 * 24 * 3600 * 1000;
+    } else if (planName === "PRO PLAN") {
+      planCredits = 200;
+      validityMs = 4 * 30 * 24 * 3600 * 1000;
+    } else if (planName === "PREMIUM PLAN") {
+      planCredits = 400;
+      validityMs = 6 * 30 * 24 * 3600 * 1000;
+    }
+
+    db.users = db.users.map((u: any) => {
+      if (u.email.toLowerCase() === studentEmail) {
+        return {
+          ...u,
+          plan: planName,
+          credits: planCredits,
+          planActivatedAt: Date.now(),
+          planExpiresAt: Date.now() + validityMs,
+          startedCases: u.startedCases || []
+        };
+      }
+      return u;
+    });
+  }
+
+  saveDB(db);
+  res.json({ success: true, payments: db.payments, users: db.users });
+});
+
+app.post("/api/admin/update-user-plan", adminMiddleware, (req, res) => {
+  const { studentEmail, planName } = req.body;
+  if (!studentEmail || !planName) {
+    return res.status(400).json({ error: "Student email and plan level inputs are required." });
+  }
+
+  const db = loadDB();
+  const cleanEmail = studentEmail.trim().toLowerCase();
+  
+  let planCredits = 0;
+  let validityMs = 0;
+  if (planName === "BASIC PLAN") {
+    planCredits = 75;
+    validityMs = 2 * 30 * 24 * 3600 * 1000;
+  } else if (planName === "PRO PLAN") {
+    planCredits = 200;
+    validityMs = 4 * 30 * 24 * 3600 * 1000;
+  } else if (planName === "PREMIUM PLAN") {
+    planCredits = 400;
+    validityMs = 6 * 30 * 24 * 3600 * 1000;
+  }
+
+  const now = Date.now();
+  const planExpiresAt = planName === "FREE PLAN" ? 0 : now + validityMs;
+
+  db.users = db.users.map((u: any) => {
+    if (u.email.toLowerCase() === cleanEmail) {
+      return { 
+        ...u, 
+        plan: planName,
+        credits: planCredits,
+        planActivatedAt: now,
+        planExpiresAt: planExpiresAt,
+        startedCases: u.startedCases || []
+      };
+    }
+    return u;
+  });
+
+  saveDB(db);
+  res.json({ success: true, users: db.users });
+});
+
+app.post("/api/auth/deduct-credit", authMiddleware, (req: any, res) => {
+  const { caseId } = req.body;
+  if (!caseId) {
+    return res.status(400).json({ error: "OSCE case registration details are required." });
+  }
+
+  const db = loadDB();
+  const cleanEmail = req.user.email.toLowerCase();
+  const user = db.users.find((u: any) => u.email.toLowerCase() === cleanEmail);
+
+  if (!user) {
+    return res.status(404).json({ error: "User profile signature not found in core database." });
+  }
+
+  // Administrators bypass deductions
+  if (user.isAdmin) {
+    return res.json({ success: true, user });
+  }
+
+  const isAlreadyStarted = user.startedCases?.includes(caseId);
+  if (!isAlreadyStarted) {
+    const currentCredits = user.credits ?? 0;
+    if (currentCredits <= 0) {
+      return res.status(403).json({ error: "Deduction blocked. You are out of active case credits. Please purchase or renew." });
+    }
+
+    user.credits = currentCredits - 1;
+    user.startedCases = [...(user.startedCases || []), caseId];
+    saveDB(db);
+  }
+
+  const token = signToken(user);
+  res.json({ success: true, user, token });
+});
+
 // API Routes
-app.post("/api/chat", async (req, res) => {
+app.post("/api/chat", authMiddleware, async (req, res) => {
   const { studentQuestion, chatHistory, patientData } = req.body;
 
   try {
@@ -247,7 +657,7 @@ app.post("/api/chat", async (req, res) => {
   }
 });
 
-app.post("/api/examiner", async (req, res) => {
+app.post("/api/examiner", authMiddleware, async (req, res) => {
   const { studentMessage, examinerHistory, patientHistory, caseData, activeQuestion } = req.body;
 
   try {
@@ -370,7 +780,7 @@ app.post("/api/examiner", async (req, res) => {
   }
 });
 
-app.post("/api/evaluate", async (req, res) => {
+app.post("/api/evaluate", authMiddleware, async (req, res) => {
   const { performance, caseData, chatHistory } = req.body;
 
   try {
@@ -548,7 +958,7 @@ Return your response strictly in the following JSON format:
 }
 `;
 
-app.post("/api/examine-step", async (req, res) => {
+app.post("/api/examine-step", authMiddleware, async (req, res) => {
   const { stepName, idealFinding, studentMessage, chatHistory } = req.body;
 
   try {

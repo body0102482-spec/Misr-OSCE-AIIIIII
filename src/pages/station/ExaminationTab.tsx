@@ -23,7 +23,7 @@ interface ExamMessage {
 }
 
 export const ExaminationTab: React.FC = () => {
-  const { currentCase, updateNotes, studentNotes, setQuotaExceeded } = useStore();
+  const { currentCase, updateNotes, studentNotes, setQuotaExceeded, currentUser } = useStore();
 
   if (!currentCase) return null;
 
@@ -158,7 +158,10 @@ export const ExaminationTab: React.FC = () => {
       // 2. Query Examiner Node API
       const response = await fetch("/api/examine-step", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": "Bearer " + (currentUser?.token || "")
+        },
         body: JSON.stringify({
           stepName: activeExam.name,
           idealFinding: activeExam.finding,

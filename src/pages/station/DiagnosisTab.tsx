@@ -4,7 +4,7 @@ import { useStore } from "../../store/useStore";
 import { motion, AnimatePresence } from "motion/react";
 
 export const DiagnosisTab: React.FC = () => {
-  const { studentNotes, updateNotes, setActiveTab, currentCase, setScore, messages, setQuotaExceeded } = useStore();
+  const { studentNotes, updateNotes, setActiveTab, currentCase, setScore, messages, setQuotaExceeded, currentUser } = useStore();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -21,7 +21,10 @@ export const DiagnosisTab: React.FC = () => {
     try {
       const response = await fetch("/api/evaluate", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": "Bearer " + (currentUser?.token || "")
+        },
         body: JSON.stringify({
           performance: studentNotes,
           chatHistory: messages.map(m => `${m.role === "student" ? "Student" : "Patient"}: ${m.content}`).join("\n"),
