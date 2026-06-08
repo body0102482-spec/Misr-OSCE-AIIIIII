@@ -66,13 +66,28 @@ function loadDB() {
       planExpiresAt: Date.now() + 3650 * 24 * 3600 * 1000,
       planActivatedAt: Date.now(),
       startedCases: []
+    },
+    {
+      fullName: "Mahmoud Nasser",
+      studentId: "MUST-ADMIN-01",
+      university: "Misr University for Science and Technology (MUST)",
+      mobile: "01024328652",
+      email: "mahmoudnasser01024@gmail.com",
+      plan: "PREMIUM PLAN",
+      isAdmin: true,
+      isActivated: true,
+      credits: 99999,
+      planExpiresAt: Date.now() + 3650 * 24 * 3600 * 1000,
+      planActivatedAt: Date.now(),
+      startedCases: []
     }
   ];
 
   const defaultPasswords = {
     "student@must.edu.eg": "student123",
     "mariam@must.edu.eg": "mariam123",
-    "mahmoud98302@must.com": "Vet20202025"
+    "mahmoud98302@must.com": "Vet20202025",
+    "mahmoudnasser01024@gmail.com": "Vet20202025"
   };
 
   const defaultPayments = [
@@ -116,7 +131,21 @@ function loadDB() {
       );
     }
     const content = fs.readFileSync(DB_PATH, "utf-8");
-    return JSON.parse(content);
+    const db = JSON.parse(content);
+    
+    // Ensure the new admin exists (Migration)
+    const adminEmail = "mahmoudnasser01024@gmail.com";
+    if (!db.users.find((u: any) => u.email.toLowerCase() === adminEmail.toLowerCase())) {
+      console.log(`Migration: Adding admin ${adminEmail} to database.`);
+      const newAdmin = defaultUsers.find(u => u.email === adminEmail);
+      if (newAdmin) {
+        db.users.push(newAdmin);
+        db.passwords[adminEmail] = defaultPasswords[adminEmail as keyof typeof defaultPasswords];
+        fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
+      }
+    }
+    
+    return db;
   } catch (error) {
     console.error("Error loading server database, using seeds:", error);
     return { users: defaultUsers, passwords: defaultPasswords, payments: defaultPayments };
@@ -423,10 +452,21 @@ app.post("/api/auth/login", (req, res) => {
 app.get("/api/auth/me", authMiddleware, (req: any, res) => {
   const db = loadDB();
   const cleanEmail = req.user.email.toLowerCase();
-  const user = db.users.find((u: any) => u.email.toLowerCase() === cleanEmail);
+  let user = db.users.find((u: any) => u.email.toLowerCase() === cleanEmail);
+  
   if (!user) {
-    return res.status(404).json({ error: "User session not found on server database." });
+    // Session exists but user is missing from DB (server restart/seed reset)
+    // We can "restore" the user if the token payload has their full data
+    if (req.user && req.user.fullName) {
+      console.log(`Restoring user ${cleanEmail} from session token.`);
+      user = req.user;
+      db.users.push(user);
+      saveDB(db);
+    } else {
+      return res.status(404).json({ error: "User session not found on server database." });
+    }
   }
+  
   const token = signToken(user); // Send refreshed token
   res.json({ success: true, user, token });
 });

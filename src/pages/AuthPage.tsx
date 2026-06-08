@@ -19,11 +19,18 @@ import { motion } from "motion/react";
 
 export const AuthPage: React.FC = () => {
   const navigate = useNavigate();
-  const { loginUser, registerUser } = useStore();
+  const { loginUser, registerUser, currentUser } = useStore();
 
   const [isLogin, setIsLogin] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Redirect if already logged in
+  React.useEffect(() => {
+    if (currentUser) {
+      navigate("/");
+    }
+  }, [currentUser, navigate]);
   
   // Login Fields
   const [loginEmail, setLoginEmail] = useState("");
@@ -41,6 +48,19 @@ export const AuthPage: React.FC = () => {
 
   const [isLoading, setIsLoading] = useState(false);
 
+  // Load remembered credentials
+  React.useEffect(() => {
+    const savedEmail = localStorage.getItem("remembered-email");
+    const savedPass = localStorage.getItem("remembered-password");
+    const savedRemember = localStorage.getItem("remember-me") === "true";
+    
+    if (savedRemember) {
+      if (savedEmail) setLoginEmail(savedEmail);
+      if (savedPass) setLoginPassword(savedPass);
+      setRememberMe(true);
+    }
+  }, []);
+
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -48,6 +68,16 @@ export const AuthPage: React.FC = () => {
     if (!loginEmail || !loginPassword) {
       setError("Please fill in all credentials.");
       return;
+    }
+
+    if (rememberMe) {
+      localStorage.setItem("remembered-email", loginEmail);
+      localStorage.setItem("remembered-password", loginPassword);
+      localStorage.setItem("remember-me", "true");
+    } else {
+      localStorage.removeItem("remembered-email");
+      localStorage.removeItem("remembered-password");
+      localStorage.setItem("remember-me", "false");
     }
 
     setIsLoading(true);
