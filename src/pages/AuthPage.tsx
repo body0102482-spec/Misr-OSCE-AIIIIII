@@ -124,8 +124,8 @@ export const AuthPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-[100dvh] bg-slate-50 flex flex-col items-center justify-center p-6 sm:p-12 font-sans selection:bg-blue-100">
-      <Link to="/" className="flex items-center gap-3 mb-10 group transition-all">
+    <div className="h-[100dvh] w-full overflow-y-auto bg-slate-50 flex flex-col items-center py-12 px-6 sm:px-12 font-sans selection:bg-blue-100">
+      <Link to="/" className="flex items-center gap-3 mb-10 group transition-all shrink-0">
         <div className="bg-blue-600 p-2.5 rounded-xl text-white shadow-lg shadow-blue-200 group-hover:scale-110 transition-transform">
           <Stethoscope size={24} />
         </div>
@@ -135,7 +135,7 @@ export const AuthPage: React.FC = () => {
         </div>
       </Link>
 
-      <div className="w-full max-w-xl bg-white border border-slate-200 rounded-[2.5rem] shadow-2xl shadow-slate-200/50 p-8 sm:p-12">
+      <div className="w-full max-w-xl bg-white border border-slate-200 rounded-[2.5rem] shadow-2xl shadow-slate-200/50 p-8 sm:p-12 mb-12">
         <div className="text-center mb-10">
           <h2 className="text-3xl font-black text-slate-900 tracking-tight leading-none mb-3">
             {isLogin ? "Student Portal" : "Student Registration"}
