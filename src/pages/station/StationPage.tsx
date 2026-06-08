@@ -261,17 +261,25 @@ export const StationPage: React.FC = () => {
           )}
 
           {/* Tabs Bar */}
-          <div className="flex px-6 pt-4 bg-white border-b border-slate-200 gap-8 shrink-0">
+          <div className="flex px-6 pt-4 bg-white border-b border-slate-200 gap-8 shrink-0 overflow-x-auto scrollbar-hide">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as any)}
-                className={`pb-4 border-b-2 font-bold text-sm transition-all relative ${
+                className={`pb-4 border-b-2 font-bold text-sm transition-all relative flex items-center gap-2 shrink-0 ${
                   activeTab === tab.id
                     ? "border-blue-600 text-blue-600"
                     : "border-transparent text-slate-400 hover:text-slate-800"
                 }`}
               >
+                {(tab.id === "history" || tab.id === "examination" || tab.id === "investigations") ? (
+                  <motion.div
+                    animate={{ x: [-3, 3, -3] }}
+                    transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }}
+                  >
+                    {tab.icon}
+                  </motion.div>
+                ) : tab.icon}
                 {tab.label}
                 {activeTab === tab.id && (
                   <motion.div 

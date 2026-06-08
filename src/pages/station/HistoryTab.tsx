@@ -512,29 +512,29 @@ export const HistoryTab: React.FC = () => {
   return (
     <div className="flex flex-col h-full bg-slate-50/50 overflow-hidden min-h-0">
       
-      {/* Top Tab Bar Switcher (Centered & Large) */}
-      <div className="bg-white border-b border-slate-200/80 p-3 sm:p-4 shrink-0 shadow-sm z-10 w-full">
-         <div className="max-w-4xl mx-auto flex gap-3">
+      {/* Top Tab Bar Switcher (Centered & Slimmer) */}
+      <div className="bg-white border-b border-slate-200/80 p-2 sm:p-2.5 shrink-0 shadow-sm z-10 w-full">
+         <div className="max-w-4xl mx-auto flex gap-2">
            <button
              type="button"
              onClick={() => setChatTarget("patient")}
-             className={`flex-1 flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-3 py-2.5 px-4 rounded-2xl border transition-all duration-200 cursor-pointer ${
+             className={`flex-1 flex flex-col sm:flex-row items-center justify-center gap-1.5 sm:gap-2 py-1.5 px-3 rounded-xl border transition-all duration-200 cursor-pointer ${
                chatTarget === "patient"
                  ? "bg-blue-50/60 border-blue-200 text-blue-700 shadow-xs ring-1 ring-blue-100"
                  : "bg-slate-55 border-slate-200 text-slate-500 hover:bg-slate-100/80 hover:text-slate-700"
              }`}
            >
-             <div className={`p-1.5 rounded-xl transition-colors shrink-0 ${
+             <div className={`p-1 rounded-lg transition-colors shrink-0 ${
                chatTarget === "patient" ? "bg-blue-600 text-white" : "bg-slate-200 text-slate-600"
              }`}>
-               <User size={20} className="sm:w-[22px] sm:h-[22px]" strokeWidth={2.2} />
+               <User size={16} className="sm:w-[18px] sm:h-[18px]" strokeWidth={2.2} />
              </div>
              <div className="text-center sm:text-left min-w-0">
-               <div className="text-[11px] font-black tracking-wide uppercase leading-tight truncate">
+               <div className="text-[10px] font-black tracking-wide uppercase leading-tight truncate">
                  Patient Encounter
                </div>
-               <div className="text-[10px] font-bold opacity-70 leading-none mt-1 truncate">
-                 {currentCase?.patient?.name || "Patient"} ({currentCase?.patient?.age || "?"} y/o)
+               <div className="text-[9px] font-bold opacity-70 leading-none mt-0.5 truncate">
+                 {currentCase?.patient?.name || "Patient"}
                </div>
              </div>
            </button>
@@ -542,23 +542,23 @@ export const HistoryTab: React.FC = () => {
            <button
              type="button"
              onClick={() => setChatTarget("examiner")}
-             className={`flex-1 flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-3 py-2.5 px-4 rounded-2xl border transition-all duration-200 cursor-pointer ${
+             className={`flex-1 flex flex-col sm:flex-row items-center justify-center gap-1.5 sm:gap-2 py-1.5 px-3 rounded-xl border transition-all duration-200 cursor-pointer ${
                chatTarget === "examiner"
                  ? "bg-slate-900 border-slate-950 text-white shadow-md shadow-slate-900/10"
                  : "bg-slate-55 border-slate-200 text-slate-500 hover:bg-slate-100/80 hover:text-slate-700"
              }`}
            >
-             <div className={`p-1.5 rounded-xl transition-colors shrink-0 ${
+             <div className={`p-1 rounded-lg transition-colors shrink-0 ${
                chatTarget === "examiner" ? "bg-slate-800 text-blue-400" : "bg-slate-200 text-slate-600"
              }`}>
-               <Shield size={20} className="sm:w-[22px] sm:h-[22px]" strokeWidth={2.2} />
+               <Shield size={16} className="sm:w-[18px] sm:h-[18px]" strokeWidth={2.2} />
              </div>
              <div className="text-center sm:text-left min-w-0">
-               <div className="text-[11px] font-black tracking-wide uppercase leading-tight truncate">
+               <div className="text-[10px] font-black tracking-wide uppercase leading-tight truncate">
                  Examiner Box
                </div>
-               <div className="text-[10px] font-bold opacity-75 leading-none mt-1 truncate">
-                 VIVA & Active Questions
+               <div className="text-[9px] font-bold opacity-75 leading-none mt-0.5 truncate">
+                 VIVA Questions
                </div>
              </div>
            </button>
@@ -822,11 +822,22 @@ export const HistoryTab: React.FC = () => {
       {/* Unified Input Control */}
       <div className="relative bg-white border-t border-slate-200 p-4 md:p-5 shrink-0 shadow-[0_-4px_16px_rgba(0,0,0,0.06)] w-full z-10">
         <div className="max-w-4xl mx-auto flex flex-col gap-3">
-           <div className="flex flex-wrap items-center justify-between gap-y-2 border-b border-slate-100 pb-2">
-              <div className="flex flex-wrap items-center gap-2 xs:gap-3">
+           <div className="flex items-center justify-between gap-y-2 border-b border-slate-100 pb-2.5">
+              <div className="flex items-center gap-3 md:gap-4">
                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
                     <Activity size={12} className="text-blue-500" /> Options
                  </span>
+
+                 <div className="flex items-center gap-1.5 bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+                    <VoiceRecognition 
+                      onTranscript={(text) => setInputText(prev => prev + (prev ? " " : "") + text)} 
+                      disabled={isTyping}
+                    />
+                    <div className="h-4 w-px bg-slate-300 mx-0.5"></div>
+                    <button className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-white text-blue-600 shadow-xs border border-slate-200 uppercase">Auto</button>
+                    <button className="text-[9px] font-bold px-1.5 py-0.5 rounded-md text-slate-500 hover:text-slate-800 uppercase">Arabic</button>
+                    <button className="text-[9px] font-bold px-1.5 py-0.5 rounded-md text-slate-500 hover:text-slate-800 uppercase">English</button>
+                 </div>
 
                  {/* Compact integrated "Ask From File" inside Examiner tab */}
                  {chatTarget === "examiner" && (
@@ -844,7 +855,7 @@ export const HistoryTab: React.FC = () => {
               </div>
               <span className="hidden sm:flex text-[10px] font-black text-slate-400 uppercase tracking-widest items-center gap-1.5">
                  <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></div>
-                 Interactions Engine Active
+                 Active
               </span>
            </div>
 
@@ -862,10 +873,6 @@ export const HistoryTab: React.FC = () => {
                 disabled={isTyping}
               />
               <div className="shrink-0 flex items-center gap-2">
-                <VoiceRecognition 
-                  onTranscript={(text) => setInputText(prev => prev + (prev ? " " : "") + text)} 
-                  disabled={isTyping}
-                />
                 <button
                   onClick={() => handleSendMessage(inputText)}
                   disabled={!inputText.trim() || isTyping}
@@ -878,22 +885,7 @@ export const HistoryTab: React.FC = () => {
               </div>
             </div>
            
-           {/* Quick Review Tracker */}
-           <div className="mt-1.5 flex items-center justify-between bg-slate-50 border border-slate-200/60 rounded-xl p-3 shadow-inner">
-              <div className="flex items-center gap-2">
-                 <div className="w-6 h-6 bg-blue-600 rounded-md flex items-center justify-center text-white shadow-sm">
-                    <ClipboardCheck size={12} />
-                  </div>
-                  <span className="text-[11px] font-black uppercase text-slate-500 tracking-wider">Findings Summary Note</span>
-              </div>
-              <input 
-                 value={studentNotes.history}
-                 onChange={(e) => updateNotes("history", e.target.value)}
-                 placeholder="Record findings here..."
-                 className="bg-transparent border-none focus:ring-0 text-[16px] font-semibold text-slate-600 w-1/2 text-right italic p-0 outline-none"
-                 style={{ fontSize: "16px" }}
-              />
-           </div>
+           {/* Findings Note Removed for Space */}
         </div>
       </div>
     </div>
