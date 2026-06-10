@@ -269,8 +269,8 @@ async function seedFirestoreIfNeeded() {
   ];
 
   try {
-    const usersSnap = await getDocs(collection(firestoreDb, "users"));
-    if (usersSnap.empty) {
+    const checkSnap = await getDoc(doc(firestoreDb, "users", "student@must.edu.eg"));
+    if (!checkSnap.exists()) {
       console.log("🌱 Seeding empty Firestore with default users...");
       for (const user of defaultUsers) {
         const pass = defaultPasswords[user.email as keyof typeof defaultPasswords] || "student123";
@@ -665,9 +665,28 @@ app.post("/api/auth/register", async (req, res) => {
   const cleanEmail = newUser.email.trim().toLowerCase();
 
   try {
-    const userDocRef = doc(firestoreDb, "users", cleanEmail);
-    const userSnap = await getDoc(userDocRef);
-    if (userSnap.exists()) {
+    let userExists = false;
+
+    // Check Firestore using getDoc
+    try {
+      const userDocRef = doc(firestoreDb, "users", cleanEmail);
+      const userSnap = await getDoc(userDocRef);
+      if (userSnap.exists()) {
+        userExists = true;
+      }
+    } catch (fErr) {
+      console.warn("Firestore count check failed, continuing with local verification:", fErr);
+    }
+
+    // fallback check from local DB
+    if (!userExists) {
+      const db = loadDB();
+      if (db.users.some((u: any) => u.email.toLowerCase() === cleanEmail)) {
+        userExists = true;
+      }
+    }
+
+    if (userExists) {
       return res.status(400).json({ error: "An account has already registered with this email address." });
     }
 
@@ -689,11 +708,23 @@ app.post("/api/auth/register", async (req, res) => {
       planExpiresAt: isMahmoud ? Date.now() + 3650 * 24 * 3600 * 1000 : 0
     };
 
-    // Save user with password securely in same doc
-    await setDoc(userDocRef, {
-      ...finalizedUser,
-      password: password
-    });
+    // Save to Firestore with dual write
+    try {
+      const userDocRef = doc(firestoreDb, "users", cleanEmail);
+      await setDoc(userDocRef, {
+        ...finalizedUser,
+        password: password
+      });
+    } catch (fErr) {
+      console.error("Firestore user write failed during registration, using local fallback:", fErr);
+    }
+
+    // Save to local server_db.json
+    const db = loadDB();
+    db.users = db.users.filter((u: any) => u.email.toLowerCase() !== cleanEmail);
+    db.users.push(finalizedUser);
+    db.passwords[cleanEmail] = password;
+    saveDB(db);
 
     const token = signToken(finalizedUser);
     res.json({ success: true, user: finalizedUser, token });
@@ -712,20 +743,36 @@ app.post("/api/auth/login", async (req, res) => {
   const cleanEmail = email.trim().toLowerCase();
 
   try {
-    const userDocRef = doc(firestoreDb, "users", cleanEmail);
-    const userSnap = await getDoc(userDocRef);
-    if (!userSnap.exists()) {
+    let userData: any = null;
+
+    // Get from Firestore
+    try {
+      const userDocRef = doc(firestoreDb, "users", cleanEmail);
+      const userSnap = await getDoc(userDocRef);
+      if (userSnap.exists()) {
+        userData = userSnap.data();
+      }
+    } catch (fErr) {
+      console.warn("Firestore login lookup failed, checking local database cache:", fErr);
+    }
+
+    // Fallback search in local database
+    if (!userData) {
+      const db = loadDB();
+      const localUser = db.users.find((u: any) => u.email.toLowerCase() === cleanEmail);
+      if (localUser) {
+        userData = {
+          ...localUser,
+          password: db.passwords[cleanEmail] || "student123"
+        };
+      }
+    }
+
+    if (!userData || userData.password !== password) {
       return res.status(400).json({ error: "Incorrect email or password combination." });
     }
 
-    const userData = userSnap.data();
-    if (userData.password !== password) {
-      return res.status(400).json({ error: "Incorrect email or password combination." });
-    }
-
-    // Return user without password field
     const { password: _, ...user } = userData;
-
     const token = signToken(user);
     res.json({ success: true, user, token });
   } catch (error: any) {
@@ -738,17 +785,43 @@ app.get("/api/auth/me", authMiddleware, async (req: any, res) => {
   const cleanEmail = req.user.email.toLowerCase();
 
   try {
-    const userDocRef = doc(firestoreDb, "users", cleanEmail);
-    const userSnap = await getDoc(userDocRef);
-    
-    if (!userSnap.exists()) {
+    let userData: any = null;
+
+    // Get from Firestore
+    try {
+      const userDocRef = doc(firestoreDb, "users", cleanEmail);
+      const userSnap = await getDoc(userDocRef);
+      if (userSnap.exists()) {
+        userData = userSnap.data();
+      }
+    } catch (fErr) {
+      console.warn("Firestore fetch profile failed, using fallback:", fErr);
+    }
+
+    // Fallback search in local
+    if (!userData) {
+      const db = loadDB();
+      userData = db.users.find((u: any) => u.email.toLowerCase() === cleanEmail);
+    }
+
+    if (!userData) {
       if (req.user && req.user.fullName) {
         console.log(`Restoring user ${cleanEmail} from session token.`);
         const user = req.user;
-        await setDoc(userDocRef, {
-          ...user,
-          password: "restored_temp_password_123"
-        });
+        const db = loadDB();
+        db.users.push(user);
+        db.passwords[cleanEmail] = "restored_temp_password_123";
+        saveDB(db);
+
+        try {
+          await setDoc(doc(firestoreDb, "users", cleanEmail), {
+            ...user,
+            password: "restored_temp_password_123"
+          });
+        } catch (fErr) {
+          console.error("Failed to write restored user profile to Firestore:", fErr);
+        }
+
         const token = signToken(user);
         return res.json({ success: true, user, token });
       } else {
@@ -756,8 +829,8 @@ app.get("/api/auth/me", authMiddleware, async (req: any, res) => {
       }
     }
 
-    const userData = userSnap.data();
-    const { password: _, ...user } = userData;
+    const userDataClean = { ...userData };
+    const { password: _, ...user } = userDataClean;
 
     const token = signToken(user);
     res.json({ success: true, user, token });
@@ -769,19 +842,31 @@ app.get("/api/auth/me", authMiddleware, async (req: any, res) => {
 
 app.get("/api/admin/system-stats", adminMiddleware, async (req, res) => {
   try {
-    const usersSnap = await getDocs(collection(firestoreDb, "users"));
-    const paymentsSnap = await getDocs(collection(firestoreDb, "payments"));
+    let users: any[] = [];
+    let payments: any[] = [];
+    const db = loadDB();
 
-    const users: any[] = [];
-    usersSnap.forEach((doc) => {
-      const { password: _, ...user } = doc.data();
-      users.push(user);
-    });
+    // Query Firestore, fallback cleanly on error
+    try {
+      const usersSnap = await getDocs(collection(firestoreDb, "users"));
+      usersSnap.forEach((doc) => {
+        const { password: _, ...user } = doc.data();
+        users.push(user);
+      });
+    } catch (e) {
+      console.warn("Firestore users listing failed, using local DB fallback:", e);
+      users = db.users.map(({ password: _, ...u }: any) => u);
+    }
 
-    const payments: any[] = [];
-    paymentsSnap.forEach((doc) => {
-      payments.push(doc.data());
-    });
+    try {
+      const paymentsSnap = await getDocs(collection(firestoreDb, "payments"));
+      paymentsSnap.forEach((doc) => {
+        payments.push(doc.data());
+      });
+    } catch (e) {
+      console.warn("Firestore payments listing failed, using local DB fallback:", e);
+      payments = db.payments || [];
+    }
 
     res.json({
       success: true,
@@ -809,14 +894,30 @@ app.post("/api/auth/submit-payment", authMiddleware, async (req: any, res) => {
   };
 
   try {
-    await setDoc(doc(firestoreDb, "payments", paymentId), newPayment);
+    // Write payment to Firestore
+    try {
+      await setDoc(doc(firestoreDb, "payments", paymentId), newPayment);
+    } catch (fErr) {
+      console.error("Firestore payment submit write failed, continuing local only:", fErr);
+    }
 
-    // Return the updated list of all payments
-    const paymentsSnap = await getDocs(collection(firestoreDb, "payments"));
-    const payments: any[] = [];
-    paymentsSnap.forEach((doc) => {
-      payments.push(doc.data());
-    });
+    // Write payment locally
+    const db = loadDB();
+    if (!db.payments) db.payments = [];
+    db.payments.push(newPayment);
+    saveDB(db);
+
+    // Fetch lists
+    let payments: any[] = [];
+    try {
+      const paymentsSnap = await getDocs(collection(firestoreDb, "payments"));
+      paymentsSnap.forEach((doc) => {
+        payments.push(doc.data());
+      });
+    } catch (err: any) {
+      console.warn("Firestore payments fetching failed, using local fallback:", err.message);
+      payments = db.payments;
+    }
 
     res.json({ success: true, payments });
   } catch (error: any) {
@@ -832,15 +933,43 @@ app.post("/api/admin/verify-payment", adminMiddleware, async (req, res) => {
   }
 
   try {
-    const paymentDocRef = doc(firestoreDb, "payments", paymentId);
-    const paymentSnap = await getDoc(paymentDocRef);
-    if (!paymentSnap.exists()) {
+    let payment: any = null;
+
+    // Get from Firestore
+    try {
+      const paymentSnap = await getDoc(doc(firestoreDb, "payments", paymentId));
+      if (paymentSnap.exists()) {
+        payment = paymentSnap.data();
+      }
+    } catch (fErr) {
+      console.warn("Firestore fetch payment failed in verify, looking local:", fErr);
+    }
+
+    // Get from local database
+    const db = loadDB();
+    if (!db.payments) db.payments = [];
+    if (!payment) {
+      payment = db.payments.find((p: any) => p.id === paymentId);
+    }
+
+    if (!payment) {
       return res.status(444).json({ error: "Transaction ticket reference not found." });
     }
 
-    const payment = paymentSnap.data();
     payment.status = status;
-    await setDoc(paymentDocRef, payment); // Update payment document
+
+    // Write updated status to Firestore
+    try {
+      await setDoc(doc(firestoreDb, "payments", paymentId), payment);
+    } catch (fErr) {
+      console.error("Firestore write verified payment failed:", fErr);
+    }
+
+    // Update locally
+    const pIdx = db.payments.findIndex((p: any) => p.id === paymentId);
+    if (pIdx >= 0) {
+      db.payments[pIdx] = payment;
+    }
 
     if (status === "Approved") {
       const studentEmail = payment.studentEmail.toLowerCase();
@@ -859,34 +988,69 @@ app.post("/api/admin/verify-payment", adminMiddleware, async (req, res) => {
         validityMs = 6 * 30 * 24 * 3600 * 1000;
       }
 
-      const studentDocRef = doc(firestoreDb, "users", studentEmail);
-      const studentSnap = await getDoc(studentDocRef);
-      if (studentSnap.exists()) {
-        const student = studentSnap.data();
-        await updateDoc(studentDocRef, {
+      let studentData: any = null;
+
+      // Fetch student
+      try {
+        const studentSnap = await getDoc(doc(firestoreDb, "users", studentEmail));
+        if (studentSnap.exists()) {
+          studentData = studentSnap.data();
+        }
+      } catch (fErr) {
+        console.warn("Firestore fetch student failed in verify payment, using local:", fErr);
+      }
+
+      if (!studentData) {
+        studentData = db.users.find((u: any) => u.email.toLowerCase() === studentEmail);
+      }
+
+      if (studentData) {
+        const updatedFields = {
           plan: planName,
           credits: planCredits,
           planActivatedAt: Date.now(),
           planExpiresAt: Date.now() + validityMs,
-          startedCases: student.startedCases || []
-        });
+          startedCases: studentData.startedCases || []
+        };
+
+        // Write to Firestore
+        try {
+          await updateDoc(doc(firestoreDb, "users", studentEmail), updatedFields);
+        } catch (fErr) {
+          console.error("Firestore user verify plan update failed:", fErr);
+        }
+
+        // Write locally
+        const uIdx = db.users.findIndex((u: any) => u.email.toLowerCase() === studentEmail);
+        if (uIdx >= 0) {
+          db.users[uIdx] = { ...db.users[uIdx], ...updatedFields };
+        }
       }
     }
 
+    saveDB(db);
+
     // Refresh and fetch lists to return to dashboard
-    const usersSnap = await getDocs(collection(firestoreDb, "users"));
-    const paymentsSnap = await getDocs(collection(firestoreDb, "payments"));
+    let users: any[] = [];
+    try {
+      const usersSnap = await getDocs(collection(firestoreDb, "users"));
+      usersSnap.forEach((doc) => {
+        const { password: _, ...user } = doc.data();
+        users.push(user);
+      });
+    } catch (e) {
+      users = db.users.map(({ password: _, ...u }: any) => u);
+    }
 
-    const users: any[] = [];
-    usersSnap.forEach((doc) => {
-      const { password: _, ...user } = doc.data();
-      users.push(user);
-    });
-
-    const payments: any[] = [];
-    paymentsSnap.forEach((doc) => {
-      payments.push(doc.data());
-    });
+    let payments: any[] = [];
+    try {
+      const paymentsSnap = await getDocs(collection(firestoreDb, "payments"));
+      paymentsSnap.forEach((doc) => {
+        payments.push(doc.data());
+      });
+    } catch (e) {
+      payments = db.payments || [];
+    }
 
     res.json({ success: true, payments, users });
   } catch (error: any) {
@@ -920,27 +1084,60 @@ app.post("/api/admin/update-user-plan", adminMiddleware, async (req, res) => {
   const planExpiresAt = planName === "FREE PLAN" ? 0 : now + validityMs;
 
   try {
-    const studentDocRef = doc(firestoreDb, "users", cleanEmail);
-    const studentSnap = await getDoc(studentDocRef);
-    if (!studentSnap.exists()) {
+    let student: any = null;
+
+    // Get from Firestore
+    try {
+      const studentSnap = await getDoc(doc(firestoreDb, "users", cleanEmail));
+      if (studentSnap.exists()) {
+        student = studentSnap.data();
+      }
+    } catch (fErr) {
+      console.warn("Firestore fetch student failed in admin action, utilizing local:", fErr);
+    }
+
+    // Get from Local
+    const db = loadDB();
+    if (!student) {
+      student = db.users.find((u: any) => u.email.toLowerCase() === cleanEmail);
+    }
+
+    if (!student) {
       return res.status(444).json({ error: "Student profile not found." });
     }
 
-    const student = studentSnap.data();
-    await updateDoc(studentDocRef, {
+    const updatedFields = {
       plan: planName,
       credits: planCredits,
       planActivatedAt: now,
       planExpiresAt: planExpiresAt,
       startedCases: student.startedCases || []
-    });
+    };
 
-    const usersSnap = await getDocs(collection(firestoreDb, "users"));
-    const users: any[] = [];
-    usersSnap.forEach((doc) => {
-      const { password: _, ...user } = doc.data();
-      users.push(user);
-    });
+    // Write to Firestore
+    try {
+      await updateDoc(doc(firestoreDb, "users", cleanEmail), updatedFields);
+    } catch (fErr) {
+      console.error("Firestore user plan update failed in admin update-user-plan:", fErr);
+    }
+
+    // Update local cache
+    const uIdx = db.users.findIndex((u: any) => u.email.toLowerCase() === cleanEmail);
+    if (uIdx >= 0) {
+      db.users[uIdx] = { ...db.users[uIdx], ...updatedFields };
+    }
+    saveDB(db);
+
+    let users: any[] = [];
+    try {
+      const usersSnap = await getDocs(collection(firestoreDb, "users"));
+      usersSnap.forEach((doc) => {
+        const { password: _, ...user } = doc.data();
+        users.push(user);
+      });
+    } catch (e) {
+      users = db.users.map(({ password: _, ...u }: any) => u);
+    }
 
     res.json({ success: true, users });
   } catch (error: any) {
@@ -958,14 +1155,31 @@ app.post("/api/auth/deduct-credit", authMiddleware, async (req: any, res) => {
   const cleanEmail = req.user.email.toLowerCase();
 
   try {
-    const userDocRef = doc(firestoreDb, "users", cleanEmail);
-    const userSnap = await getDoc(userDocRef);
-    if (!userSnap.exists()) {
+    let userData: any = null;
+
+    // Get from Firestore
+    try {
+      const userDocRef = doc(firestoreDb, "users", cleanEmail);
+      const userSnap = await getDoc(userDocRef);
+      if (userSnap.exists()) {
+        userData = userSnap.data();
+      }
+    } catch (fErr) {
+      console.warn("Firestore user lookup failed, falling back to local DB cache:", fErr);
+    }
+
+    // fallback from local
+    const db = loadDB();
+    if (!userData) {
+      userData = db.users.find((u: any) => u.email.toLowerCase() === cleanEmail);
+    }
+
+    if (!userData) {
       return res.status(444).json({ error: "User profile signature not found in core database." });
     }
 
-    const userData = userSnap.data();
-    const { password: _, ...user } = userData;
+    const userDataClean = { ...userData };
+    const { password: _, ...user } = userDataClean;
 
     // Administrators bypass deductions
     if (user.isAdmin) {
@@ -983,10 +1197,23 @@ app.post("/api/auth/deduct-credit", authMiddleware, async (req: any, res) => {
       user.credits = currentCredits - 1;
       user.startedCases = [...startedCases, caseId];
 
-      await updateDoc(userDocRef, {
-        credits: user.credits,
-        startedCases: user.startedCases
-      });
+      const userDocRef = doc(firestoreDb, "users", cleanEmail);
+      try {
+        await updateDoc(userDocRef, {
+          credits: user.credits,
+          startedCases: user.startedCases
+        });
+      } catch (fErr) {
+        console.error("Firestore credits update failed:", fErr);
+      }
+
+      // Sync local DB cache
+      const uIdx = db.users.findIndex((u: any) => u.email.toLowerCase() === cleanEmail);
+      if (uIdx >= 0) {
+        db.users[uIdx].credits = user.credits;
+        db.users[uIdx].startedCases = user.startedCases;
+      }
+      saveDB(db);
     }
 
     const token = signToken(user);
