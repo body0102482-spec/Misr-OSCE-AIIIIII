@@ -66,15 +66,28 @@ const ai = new GoogleGenAI({
   }
 });
 
+function isQuotaError(error: any, status?: number): boolean {
+  const errStatus = status || error?.status || error?.statusCode || (error?.error && error?.error?.status);
+  if (errStatus === 429) return true;
+  const errorStr = (error?.message || String(error)).toLowerCase();
+  return (
+    errorStr.includes("429") ||
+    errorStr.includes("quota") ||
+    errorStr.includes("rate limit") ||
+    errorStr.includes("resource exhausted") ||
+    errorStr.includes("too many requests")
+  );
+}
+
 // Robust wrapper for generateContent to retry and automatic fallback in case of high demand (503 Service Unavailable) or transient errors
 async function safeGenerateContent(args: {
   contents: any;
   config?: any;
 }): Promise<any> {
   const modelsToTry = [
-    { name: "gemini-3.5-flash", useThinking: true },
-    { name: "gemini-flash-latest", useThinking: false },
-    { name: "gemini-3.1-flash-lite", useThinking: false }
+    { name: "gemini-3.5-flash", supportsThinking: true },
+    { name: "gemini-flash-latest", supportsThinking: false },
+    { name: "gemini-3.1-flash-lite", supportsThinking: true }
   ];
 
   let lastError: any = null;
@@ -83,12 +96,14 @@ async function safeGenerateContent(args: {
     const modelObj = modelsToTry[i];
     const attemptConfig = args.config ? { ...args.config } : {};
 
-    if (!modelObj.useThinking) {
+    if (modelObj.supportsThinking) {
+      attemptConfig.thinkingConfig = { thinkingLevel: ThinkingLevel.MINIMAL };
+    } else {
       delete attemptConfig.thinkingConfig;
     }
 
     try {
-      console.log(`🤖 Attempting content generation with model: ${modelObj.name}`);
+      console.log(`🤖 Attempting content generation with model: ${modelObj.name} (Direct responses enabled for maximum speed)`);
       const result = await ai.models.generateContent({
         model: modelObj.name,
         contents: args.contents,
@@ -103,7 +118,7 @@ async function safeGenerateContent(args: {
       
       console.warn(`⚠️ Model "${modelObj.name}" failed: status=${status}, message="${errorStr.substring(0, 200)}".`);
 
-      const isQuota = status === 429 || errorStr.includes("429") || errorStr.includes("quota") || errorStr.includes("limit");
+      const isQuota = isQuotaError(error, status);
       if (isQuota) {
         console.log("ℹ️ Account quota error detected. Instantly breaking lookup loop to prevent retry latency.");
         break;
@@ -123,9 +138,9 @@ async function safeGenerateContentStream(args: {
   config?: any;
 }): Promise<any> {
   const modelsToTry = [
-    { name: "gemini-3.5-flash", useThinking: true },
-    { name: "gemini-flash-latest", useThinking: false },
-    { name: "gemini-3.1-flash-lite", useThinking: false }
+    { name: "gemini-3.5-flash", supportsThinking: true },
+    { name: "gemini-flash-latest", supportsThinking: false },
+    { name: "gemini-3.1-flash-lite", supportsThinking: true }
   ];
 
   let lastError: any = null;
@@ -134,12 +149,14 @@ async function safeGenerateContentStream(args: {
     const modelObj = modelsToTry[i];
     const attemptConfig = args.config ? { ...args.config } : {};
 
-    if (!modelObj.useThinking) {
+    if (modelObj.supportsThinking) {
+      attemptConfig.thinkingConfig = { thinkingLevel: ThinkingLevel.MINIMAL };
+    } else {
       delete attemptConfig.thinkingConfig;
     }
 
     try {
-      console.log(`🤖 Attempting stream content generation with model: ${modelObj.name}`);
+      console.log(`🤖 Attempting stream content generation with model: ${modelObj.name} (Direct responses enabled for maximum speed)`);
       const stream = await ai.models.generateContentStream({
         model: modelObj.name,
         contents: args.contents,
@@ -154,7 +171,7 @@ async function safeGenerateContentStream(args: {
       
       console.warn(`⚠️ Stream model "${modelObj.name}" failed: status=${status}, message="${errorStr.substring(0, 200)}".`);
 
-      const isQuota = status === 429 || errorStr.includes("429") || errorStr.includes("quota") || errorStr.includes("limit");
+      const isQuota = isQuotaError(error, status);
       if (isQuota) {
         console.log("ℹ️ Account stream quota error detected. Instantly breaking stream loop to prevent retry latency.");
         break;
@@ -1258,7 +1275,7 @@ app.post("/api/chat", authMiddleware, async (req, res) => {
     }
     res.end();
   } catch (error: any) {
-    const isQuota = error?.message?.includes("429") || error?.status === 429 || String(error).includes("429") || String(error).toLowerCase().includes("quota");
+    const isQuota = isQuotaError(error);
     if (isQuota) {
       console.log("ℹ️ Gemini API Quota Limit Reached (429). Returning explicit quota message.");
       res.write("⚠️ عذراً يا دكتور، طاقة المريض (AI Quota) نفدت حالياً ولا يستطيع الإجابة بشكل كامل. يرجى المحاولة لاحقاً!");
@@ -1352,7 +1369,7 @@ app.post("/api/examiner", authMiddleware, async (req, res) => {
       res.json({ text: responseText, quotaExceeded: false });
     }
   } catch (error: any) {
-    const isQuota = error?.message?.includes("429") || error?.status === 429 || String(error).includes("429") || String(error).toLowerCase().includes("quota");
+    const isQuota = isQuotaError(error);
     if (isQuota) {
       console.log("ℹ️ Gemini API Quota Limit Reached (429) during examiner step.");
       return res.json({ 
@@ -1488,7 +1505,7 @@ app.post("/api/evaluate", authMiddleware, async (req, res) => {
 
     res.json({ ...parsedJson, quotaExceeded: false });
   } catch (error: any) {
-    const isQuota = error?.message?.includes("429") || error?.status === 429 || String(error).includes("429") || String(error).toLowerCase().includes("quota");
+    const isQuota = isQuotaError(error);
     if (isQuota) {
       console.log("ℹ️ Gemini API Quota Limit Reached (429) during scorecard generation.");
       return res.json({
@@ -1644,7 +1661,7 @@ app.post("/api/examine-step", authMiddleware, async (req, res) => {
       res.json({ text: responseText, isResolved: false, quotaExceeded: false });
     }
   } catch (error: any) {
-    const isQuota = error?.message?.includes("429") || error?.status === 429 || String(error).includes("429") || String(error).toLowerCase().includes("quota");
+    const isQuota = isQuotaError(error);
     if (isQuota) {
       console.log("ℹ️ Gemini API Quota Limit Reached (429) during physical examination step.");
       return res.json({ 
