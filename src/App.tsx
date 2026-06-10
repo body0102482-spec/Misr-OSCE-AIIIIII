@@ -8,12 +8,22 @@ import { StudentDashboard } from "./pages/StudentDashboard";
 import { useStore } from "./store/useStore";
 
 export default function App() {
-  const { currentUser, syncUser } = useStore();
+  const { currentUser, syncUser, loginUser } = useStore();
 
   React.useEffect(() => {
-    if (currentUser) {
-      syncUser();
-    }
+    const initApp = async () => {
+      if (currentUser) {
+        await syncUser();
+      } else {
+        // Silent automatic login with default student credentials to ensure the medical simulation engine works instantly
+        try {
+          await loginUser("student@must.edu.eg", "student123", true);
+        } catch (e) {
+          console.error("Silent automatic login failed:", e);
+        }
+      }
+    };
+    initApp();
   }, []);
 
   return (

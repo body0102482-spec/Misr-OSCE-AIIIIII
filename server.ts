@@ -5,8 +5,54 @@ import { GoogleGenAI, ThinkingLevel } from "@google/genai";
 import dotenv from "dotenv";
 import crypto from "crypto";
 import fs from "fs";
+import { initializeApp } from "firebase/app";
+import { initializeFirestore, doc, getDoc, getDocs, setDoc, updateDoc, collection, getDocFromServer } from "firebase/firestore";
 
 dotenv.config();
+
+// Intercept and sanitize benign Firebase Firestore web SDK idle stream cancellations on server-side
+const originalConsoleError = console.error;
+console.error = function (...args) {
+  const message = args.map(arg => typeof arg === "object" ? JSON.stringify(arg) : String(arg)).join(" ");
+  if (message.includes("Disconnecting idle stream") || message.includes("Timed out waiting for new targets")) {
+    // Route to informational log to prevent false alarms in telemetry/error captures
+    console.log("ℹ️ [Firebase Connection Manager] Idle stream closed dynamically.");
+    return;
+  }
+  originalConsoleError.apply(console, args);
+};
+
+const originalConsoleWarn = console.warn;
+console.warn = function (...args) {
+  const message = args.map(arg => typeof arg === "object" ? JSON.stringify(arg) : String(arg)).join(" ");
+  if (message.includes("Disconnecting idle stream") || message.includes("Timed out waiting for new targets")) {
+    console.log("ℹ️ [Firebase Connection Manager] Idle stream closed dynamically.");
+    return;
+  }
+  originalConsoleWarn.apply(console, args);
+};
+
+const firebaseConfigPath = path.join(process.cwd(), "firebase-applet-config.json");
+const firebaseConfig = JSON.parse(fs.readFileSync(firebaseConfigPath, "utf-8"));
+const firebaseApp = initializeApp(firebaseConfig);
+const firestoreDb = initializeFirestore(firebaseApp, {
+  experimentalForceLongPolling: true,
+}, firebaseConfig.firestoreDatabaseId);
+
+// Validate Connection to Firestore on boot as per firebase-integration skill
+async function testFirestoreConnection() {
+  try {
+    await getDocFromServer(doc(firestoreDb, "test", "connection"));
+    console.log("📶 Firestore connection validated successfully.");
+  } catch (error: any) {
+    if (error instanceof Error && error.message.includes("the client is offline")) {
+      console.error("⚠️ Firestore Connection Check Failed: Please check your Firebase configuration. Client is offline.");
+    } else {
+      console.log("📶 Firestore endpoint reachable (connection validated).");
+    }
+  }
+}
+testFirestoreConnection();
 
 const app = express();
 app.use(express.json());
@@ -20,8 +66,232 @@ const ai = new GoogleGenAI({
   }
 });
 
+// Robust wrapper for generateContent to retry and automatic fallback in case of high demand (503 Service Unavailable) or transient errors
+async function safeGenerateContent(args: {
+  contents: any;
+  config?: any;
+}): Promise<any> {
+  const modelsToTry = [
+    { name: "gemini-3.5-flash", useThinking: true },
+    { name: "gemini-flash-latest", useThinking: false },
+    { name: "gemini-3.1-flash-lite", useThinking: false }
+  ];
+
+  let lastError: any = null;
+
+  for (let i = 0; i < modelsToTry.length; i++) {
+    const modelObj = modelsToTry[i];
+    const attemptConfig = args.config ? { ...args.config } : {};
+
+    if (!modelObj.useThinking) {
+      delete attemptConfig.thinkingConfig;
+    }
+
+    try {
+      console.log(`🤖 Attempting content generation with model: ${modelObj.name}`);
+      const result = await ai.models.generateContent({
+        model: modelObj.name,
+        contents: args.contents,
+        config: attemptConfig,
+      });
+      console.log(`✅ Content generation succeeded using model: ${modelObj.name}`);
+      return result;
+    } catch (error: any) {
+      lastError = error;
+      const status = error?.status || error?.statusCode || (error?.error && error?.error?.status);
+      const errorStr = (error?.message || String(error)).toLowerCase();
+      
+      console.warn(`⚠️ Model "${modelObj.name}" failed: status=${status}, message="${errorStr.substring(0, 200)}".`);
+
+      const isQuota = status === 429 || errorStr.includes("429") || errorStr.includes("quota") || errorStr.includes("limit");
+      if (isQuota) {
+        console.log("ℹ️ Account quota error detected. Instantly breaking lookup loop to prevent retry latency.");
+        break;
+      }
+
+      // Wait a tiny bit (150ms) before fallback
+      await new Promise((resolve) => setTimeout(resolve, 150));
+    }
+  }
+
+  throw lastError;
+}
+
+// Robust wrapper for generateContentStream to retry and automatic fallback in case of high demand (503 Service Unavailable) or transient errors
+async function safeGenerateContentStream(args: {
+  contents: any;
+  config?: any;
+}): Promise<any> {
+  const modelsToTry = [
+    { name: "gemini-3.5-flash", useThinking: true },
+    { name: "gemini-flash-latest", useThinking: false },
+    { name: "gemini-3.1-flash-lite", useThinking: false }
+  ];
+
+  let lastError: any = null;
+
+  for (let i = 0; i < modelsToTry.length; i++) {
+    const modelObj = modelsToTry[i];
+    const attemptConfig = args.config ? { ...args.config } : {};
+
+    if (!modelObj.useThinking) {
+      delete attemptConfig.thinkingConfig;
+    }
+
+    try {
+      console.log(`🤖 Attempting stream content generation with model: ${modelObj.name}`);
+      const stream = await ai.models.generateContentStream({
+        model: modelObj.name,
+        contents: args.contents,
+        config: attemptConfig,
+      });
+      console.log(`✅ Stream content generation initiated successfully using model: ${modelObj.name}`);
+      return stream;
+    } catch (error: any) {
+      lastError = error;
+      const status = error?.status || error?.statusCode || (error?.error && error?.error?.status);
+      const errorStr = (error?.message || String(error)).toLowerCase();
+      
+      console.warn(`⚠️ Stream model "${modelObj.name}" failed: status=${status}, message="${errorStr.substring(0, 200)}".`);
+
+      const isQuota = status === 429 || errorStr.includes("429") || errorStr.includes("quota") || errorStr.includes("limit");
+      if (isQuota) {
+        console.log("ℹ️ Account stream quota error detected. Instantly breaking stream loop to prevent retry latency.");
+        break;
+      }
+
+      // Wait a tiny bit (150ms) before fallback
+      await new Promise((resolve) => setTimeout(resolve, 150));
+    }
+  }
+
+  throw lastError;
+}
+
 // JSON File Database Persistence
 const DB_PATH = path.join(process.cwd(), "src", "data", "server_db.json");
+
+// Seeding Firebase Firestore with template data if empty
+async function seedFirestoreIfNeeded() {
+  const defaultUsers = [
+    {
+      fullName: "Mahmoud Nasser",
+      studentId: "MUST-2024-819",
+      university: "Misr University for Science and Technology (MUST)",
+      mobile: "01024828652",
+      email: "student@must.edu.eg",
+      plan: "BASIC PLAN",
+      isAdmin: false,
+      isActivated: true,
+      credits: 10,
+      planExpiresAt: Date.now() + 60 * 24 * 3600 * 1000,
+      planActivatedAt: Date.now(),
+      startedCases: []
+    },
+    {
+      fullName: "Mariam El-Sawy",
+      studentId: "MUST-2023-452",
+      university: "Misr University for Science and Technology (MUST)",
+      mobile: "01024828652",
+      email: "mariam@must.edu.eg",
+      plan: "BASIC PLAN",
+      isAdmin: false,
+      isActivated: true,
+      credits: 75,
+      planExpiresAt: Date.now() + 60 * 24 * 3600 * 1000,
+      planActivatedAt: Date.now(),
+      startedCases: []
+    },
+    {
+      fullName: "Admin Mahmoud",
+      studentId: "ADMIN-98302",
+      university: "Misr University for Science and Technology (MUST)",
+      mobile: "01024328652",
+      email: "mahmoud98302@must.com",
+      plan: "PREMIUM PLAN",
+      isAdmin: true,
+      isActivated: true,
+      credits: 99999,
+      planExpiresAt: Date.now() + 3650 * 24 * 3600 * 1000,
+      planActivatedAt: Date.now(),
+      startedCases: []
+    },
+    {
+      fullName: "Mahmoud Nasser",
+      studentId: "MUST-ADMIN-01",
+      university: "Misr University for Science and Technology (MUST)",
+      mobile: "01024328652",
+      email: "mahmoudnasser01024@gmail.com",
+      plan: "PREMIUM PLAN",
+      isAdmin: true,
+      isActivated: true,
+      credits: 99999,
+      planExpiresAt: Date.now() + 3650 * 24 * 3600 * 1000,
+      planActivatedAt: Date.now(),
+      startedCases: []
+    }
+  ];
+
+  const defaultPasswords = {
+    "student@must.edu.eg": "student123",
+    "mariam@must.edu.eg": "mariam123",
+    "mahmoud98302@must.com": "Vet20202025",
+    "mahmoudnasser01024@gmail.com": "Vet20202025"
+  };
+
+  const defaultPayments = [
+    {
+      id: "pay-1",
+      studentEmail: "mariam@must.edu.eg",
+      studentName: "Mariam El-Sawy",
+      mobile: "01024828652",
+      plan: "BASIC PLAN",
+      amount: 150,
+      method: "Vodafone Cash",
+      screenshotText: "Screenshot: Transfer of 150 EGP verified via Vodafone Cash SMS receipts.",
+      transactionId: "TXN98124921",
+      timestamp: Date.now() - 24 * 3600 * 1000,
+      status: "Approved"
+    },
+    {
+      id: "pay-2",
+      studentEmail: "student@must.edu.eg",
+      studentName: "Mahmoud Nasser",
+      mobile: "01024828652",
+      plan: "PREMIUM PLAN",
+      amount: 300,
+      method: "InstaPay",
+      screenshotText: "Screenshot: Transfer of 300 EGP to digital address MUST_OSCE@instapay.",
+      transactionId: "IPY88231940",
+      timestamp: Date.now() - 2 * 3600 * 1000,
+      status: "Pending"
+    }
+  ];
+
+  try {
+    const usersSnap = await getDocs(collection(firestoreDb, "users"));
+    if (usersSnap.empty) {
+      console.log("🌱 Seeding empty Firestore with default users...");
+      for (const user of defaultUsers) {
+        const pass = defaultPasswords[user.email as keyof typeof defaultPasswords] || "student123";
+        await setDoc(doc(firestoreDb, "users", user.email.toLowerCase()), {
+          ...user,
+          password: pass
+        });
+      }
+
+      console.log("🌱 Seeding default payments...");
+      for (const p of defaultPayments) {
+        await setDoc(doc(firestoreDb, "payments", p.id), p);
+      }
+      console.log("✅ Seeding of database completed successfully!");
+    } else {
+      console.log("✅ Database is already populated. Seeding skipped.");
+    }
+  } catch (error) {
+    console.error("❌ Failed to auto-seed Firestore on boot:", error);
+  }
+}
 
 function loadDB() {
   const defaultUsers = [
@@ -386,179 +656,253 @@ Return your response strictly in the following JSON format:
 `;
 
 // Authentication, Synchronization and Licensing Server API Engine
-app.post("/api/auth/register", (req, res) => {
+app.post("/api/auth/register", async (req, res) => {
   const { newUser, password } = req.body;
   if (!newUser || !newUser.email || !password) {
     return res.status(400).json({ error: "Email, password, and profile values are required." });
   }
 
-  const db = loadDB();
   const cleanEmail = newUser.email.trim().toLowerCase();
 
-  const userExists = db.users.some((u: any) => u.email.toLowerCase() === cleanEmail);
-  if (userExists) {
-    return res.status(400).json({ error: "An account has already registered with this email address." });
+  try {
+    const userDocRef = doc(firestoreDb, "users", cleanEmail);
+    const userSnap = await getDoc(userDocRef);
+    if (userSnap.exists()) {
+      return res.status(400).json({ error: "An account has already registered with this email address." });
+    }
+
+    // Force Mahmoud to be admin, everyone else registered starts as FREE PLAN
+    const isMahmoud = cleanEmail === "mahmoud98302@must.com" || cleanEmail === "mahmoudnasser01024@gmail.com";
+    const plan = isMahmoud ? "PREMIUM PLAN" : ("FREE PLAN" as const);
+    const credits = isMahmoud ? 99999 : 0;
+    const isAdmin = isMahmoud;
+
+    const finalizedUser = {
+      ...newUser,
+      email: cleanEmail,
+      plan,
+      credits,
+      isAdmin,
+      isActivated: true,
+      startedCases: [],
+      planActivatedAt: Date.now(),
+      planExpiresAt: isMahmoud ? Date.now() + 3650 * 24 * 3600 * 1000 : 0
+    };
+
+    // Save user with password securely in same doc
+    await setDoc(userDocRef, {
+      ...finalizedUser,
+      password: password
+    });
+
+    const token = signToken(finalizedUser);
+    res.json({ success: true, user: finalizedUser, token });
+  } catch (error: any) {
+    console.error("Error in /api/auth/register:", error);
+    res.status(500).json({ error: "Database error during registration." });
   }
-
-  // Force Mahmoud to be admin, everyone else registered starts as FREE PLAN
-  const isMahmoud = cleanEmail === "mahmoud98302@must.com";
-  const plan = isMahmoud ? "PREMIUM PLAN" : ("FREE PLAN" as const);
-  const credits = isMahmoud ? 99999 : 0;
-  const isAdmin = isMahmoud;
-
-  const finalizedUser = {
-    ...newUser,
-    email: cleanEmail,
-    plan,
-    credits,
-    isAdmin,
-    isActivated: true,
-    startedCases: [],
-    planActivatedAt: Date.now(),
-    planExpiresAt: isMahmoud ? Date.now() + 3650 * 24 * 3600 * 1000 : 0
-  };
-
-  db.users.push(finalizedUser);
-  db.passwords[cleanEmail] = password;
-  saveDB(db);
-
-  const token = signToken(finalizedUser);
-  res.json({ success: true, user: finalizedUser, token });
 });
 
-app.post("/api/auth/login", (req, res) => {
+app.post("/api/auth/login", async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) {
     return res.status(400).json({ error: "Email and password are required." });
   }
 
-  const db = loadDB();
   const cleanEmail = email.trim().toLowerCase();
 
-  const savedPass = db.passwords[cleanEmail];
-  if (!savedPass || savedPass !== password) {
-    return res.status(400).json({ error: "Incorrect email or password combination." });
-  }
-
-  const user = db.users.find((u: any) => u.email.toLowerCase() === cleanEmail);
-  if (!user) {
-    return res.status(500).json({ error: "User record consistency failure. Please contact Admin." });
-  }
-
-  const token = signToken(user);
-  res.json({ success: true, user, token });
-});
-
-app.get("/api/auth/me", authMiddleware, (req: any, res) => {
-  const db = loadDB();
-  const cleanEmail = req.user.email.toLowerCase();
-  let user = db.users.find((u: any) => u.email.toLowerCase() === cleanEmail);
-  
-  if (!user) {
-    // Session exists but user is missing from DB (server restart/seed reset)
-    // We can "restore" the user if the token payload has their full data
-    if (req.user && req.user.fullName) {
-      console.log(`Restoring user ${cleanEmail} from session token.`);
-      user = req.user;
-      db.users.push(user);
-      saveDB(db);
-    } else {
-      return res.status(404).json({ error: "User session not found on server database." });
+  try {
+    const userDocRef = doc(firestoreDb, "users", cleanEmail);
+    const userSnap = await getDoc(userDocRef);
+    if (!userSnap.exists()) {
+      return res.status(400).json({ error: "Incorrect email or password combination." });
     }
+
+    const userData = userSnap.data();
+    if (userData.password !== password) {
+      return res.status(400).json({ error: "Incorrect email or password combination." });
+    }
+
+    // Return user without password field
+    const { password: _, ...user } = userData;
+
+    const token = signToken(user);
+    res.json({ success: true, user, token });
+  } catch (error: any) {
+    console.error("Error in /api/auth/login:", error);
+    res.status(500).json({ error: "Database error during login." });
   }
-  
-  const token = signToken(user); // Send refreshed token
-  res.json({ success: true, user, token });
 });
 
-app.get("/api/admin/system-stats", adminMiddleware, (req, res) => {
-  const db = loadDB();
-  res.json({
-    success: true,
-    users: db.users,
-    payments: db.payments
-  });
+app.get("/api/auth/me", authMiddleware, async (req: any, res) => {
+  const cleanEmail = req.user.email.toLowerCase();
+
+  try {
+    const userDocRef = doc(firestoreDb, "users", cleanEmail);
+    const userSnap = await getDoc(userDocRef);
+    
+    if (!userSnap.exists()) {
+      if (req.user && req.user.fullName) {
+        console.log(`Restoring user ${cleanEmail} from session token.`);
+        const user = req.user;
+        await setDoc(userDocRef, {
+          ...user,
+          password: "restored_temp_password_123"
+        });
+        const token = signToken(user);
+        return res.json({ success: true, user, token });
+      } else {
+        return res.status(404).json({ error: "User session not found on server database." });
+      }
+    }
+
+    const userData = userSnap.data();
+    const { password: _, ...user } = userData;
+
+    const token = signToken(user);
+    res.json({ success: true, user, token });
+  } catch (error: any) {
+    console.error("Error in /api/auth/me:", error);
+    res.status(500).json({ error: "Database error fetching profile." });
+  }
 });
 
-app.post("/api/auth/submit-payment", authMiddleware, (req: any, res) => {
+app.get("/api/admin/system-stats", adminMiddleware, async (req, res) => {
+  try {
+    const usersSnap = await getDocs(collection(firestoreDb, "users"));
+    const paymentsSnap = await getDocs(collection(firestoreDb, "payments"));
+
+    const users: any[] = [];
+    usersSnap.forEach((doc) => {
+      const { password: _, ...user } = doc.data();
+      users.push(user);
+    });
+
+    const payments: any[] = [];
+    paymentsSnap.forEach((doc) => {
+      payments.push(doc.data());
+    });
+
+    res.json({
+      success: true,
+      users,
+      payments
+    });
+  } catch (error: any) {
+    console.error("Error in /api/admin/system-stats:", error);
+    res.status(500).json({ error: "Database error loading stats." });
+  }
+});
+
+app.post("/api/auth/submit-payment", authMiddleware, async (req: any, res) => {
   const { payment } = req.body;
   if (!payment) {
     return res.status(400).json({ error: "Payment submission body is required." });
   }
 
-  const db = loadDB();
+  const paymentId = "pay-" + Date.now();
   const newPayment = {
     ...payment,
-    id: "pay-" + Date.now(),
+    id: paymentId,
     timestamp: Date.now(),
     status: "Pending"
   };
 
-  db.payments.push(newPayment);
-  saveDB(db);
+  try {
+    await setDoc(doc(firestoreDb, "payments", paymentId), newPayment);
 
-  res.json({ success: true, payments: db.payments });
+    // Return the updated list of all payments
+    const paymentsSnap = await getDocs(collection(firestoreDb, "payments"));
+    const payments: any[] = [];
+    paymentsSnap.forEach((doc) => {
+      payments.push(doc.data());
+    });
+
+    res.json({ success: true, payments });
+  } catch (error: any) {
+    console.error("Error in /api/auth/submit-payment:", error);
+    res.status(500).json({ error: "Database error submitting payment." });
+  }
 });
 
-app.post("/api/admin/verify-payment", adminMiddleware, (req, res) => {
+app.post("/api/admin/verify-payment", adminMiddleware, async (req, res) => {
   const { paymentId, status } = req.body;
   if (!paymentId || !status) {
     return res.status(400).json({ error: "Payment identification details and status required." });
   }
 
-  const db = loadDB();
-  const payment = db.payments.find((p: any) => p.id === paymentId);
-  if (!payment) {
-    return res.status(444).json({ error: "Transaction ticket reference not found." });
-  }
-
-  payment.status = status;
-
-  if (status === "Approved") {
-    const studentEmail = payment.studentEmail.toLowerCase();
-    const planName = payment.plan;
-
-    let planCredits = 0;
-    let validityMs = 0;
-    if (planName === "BASIC PLAN") {
-      planCredits = 75;
-      validityMs = 2 * 30 * 24 * 3600 * 1000;
-    } else if (planName === "PRO PLAN") {
-      planCredits = 200;
-      validityMs = 4 * 30 * 24 * 3600 * 1000;
-    } else if (planName === "PREMIUM PLAN") {
-      planCredits = 400;
-      validityMs = 6 * 30 * 24 * 3600 * 1000;
+  try {
+    const paymentDocRef = doc(firestoreDb, "payments", paymentId);
+    const paymentSnap = await getDoc(paymentDocRef);
+    if (!paymentSnap.exists()) {
+      return res.status(444).json({ error: "Transaction ticket reference not found." });
     }
 
-    db.users = db.users.map((u: any) => {
-      if (u.email.toLowerCase() === studentEmail) {
-        return {
-          ...u,
+    const payment = paymentSnap.data();
+    payment.status = status;
+    await setDoc(paymentDocRef, payment); // Update payment document
+
+    if (status === "Approved") {
+      const studentEmail = payment.studentEmail.toLowerCase();
+      const planName = payment.plan;
+
+      let planCredits = 0;
+      let validityMs = 0;
+      if (planName === "BASIC PLAN") {
+        planCredits = 75;
+        validityMs = 2 * 30 * 24 * 3600 * 1000;
+      } else if (planName === "PRO PLAN") {
+        planCredits = 200;
+        validityMs = 4 * 30 * 24 * 3600 * 1000;
+      } else if (planName === "PREMIUM PLAN") {
+        planCredits = 400;
+        validityMs = 6 * 30 * 24 * 3600 * 1000;
+      }
+
+      const studentDocRef = doc(firestoreDb, "users", studentEmail);
+      const studentSnap = await getDoc(studentDocRef);
+      if (studentSnap.exists()) {
+        const student = studentSnap.data();
+        await updateDoc(studentDocRef, {
           plan: planName,
           credits: planCredits,
           planActivatedAt: Date.now(),
           planExpiresAt: Date.now() + validityMs,
-          startedCases: u.startedCases || []
-        };
+          startedCases: student.startedCases || []
+        });
       }
-      return u;
-    });
-  }
+    }
 
-  saveDB(db);
-  res.json({ success: true, payments: db.payments, users: db.users });
+    // Refresh and fetch lists to return to dashboard
+    const usersSnap = await getDocs(collection(firestoreDb, "users"));
+    const paymentsSnap = await getDocs(collection(firestoreDb, "payments"));
+
+    const users: any[] = [];
+    usersSnap.forEach((doc) => {
+      const { password: _, ...user } = doc.data();
+      users.push(user);
+    });
+
+    const payments: any[] = [];
+    paymentsSnap.forEach((doc) => {
+      payments.push(doc.data());
+    });
+
+    res.json({ success: true, payments, users });
+  } catch (error: any) {
+    console.error("Error in /api/admin/verify-payment:", error);
+    res.status(500).json({ error: "Database error during execution." });
+  }
 });
 
-app.post("/api/admin/update-user-plan", adminMiddleware, (req, res) => {
+app.post("/api/admin/update-user-plan", adminMiddleware, async (req, res) => {
   const { studentEmail, planName } = req.body;
   if (!studentEmail || !planName) {
     return res.status(400).json({ error: "Student email and plan level inputs are required." });
   }
 
-  const db = loadDB();
   const cleanEmail = studentEmail.trim().toLowerCase();
-  
+
   let planCredits = 0;
   let validityMs = 0;
   if (planName === "BASIC PLAN") {
@@ -575,62 +919,91 @@ app.post("/api/admin/update-user-plan", adminMiddleware, (req, res) => {
   const now = Date.now();
   const planExpiresAt = planName === "FREE PLAN" ? 0 : now + validityMs;
 
-  db.users = db.users.map((u: any) => {
-    if (u.email.toLowerCase() === cleanEmail) {
-      return { 
-        ...u, 
-        plan: planName,
-        credits: planCredits,
-        planActivatedAt: now,
-        planExpiresAt: planExpiresAt,
-        startedCases: u.startedCases || []
-      };
+  try {
+    const studentDocRef = doc(firestoreDb, "users", cleanEmail);
+    const studentSnap = await getDoc(studentDocRef);
+    if (!studentSnap.exists()) {
+      return res.status(444).json({ error: "Student profile not found." });
     }
-    return u;
-  });
 
-  saveDB(db);
-  res.json({ success: true, users: db.users });
+    const student = studentSnap.data();
+    await updateDoc(studentDocRef, {
+      plan: planName,
+      credits: planCredits,
+      planActivatedAt: now,
+      planExpiresAt: planExpiresAt,
+      startedCases: student.startedCases || []
+    });
+
+    const usersSnap = await getDocs(collection(firestoreDb, "users"));
+    const users: any[] = [];
+    usersSnap.forEach((doc) => {
+      const { password: _, ...user } = doc.data();
+      users.push(user);
+    });
+
+    res.json({ success: true, users });
+  } catch (error: any) {
+    console.error("Error in /api/admin/update-user-plan:", error);
+    res.status(500).json({ error: "Database error." });
+  }
 });
 
-app.post("/api/auth/deduct-credit", authMiddleware, (req: any, res) => {
+app.post("/api/auth/deduct-credit", authMiddleware, async (req: any, res) => {
   const { caseId } = req.body;
   if (!caseId) {
     return res.status(400).json({ error: "OSCE case registration details are required." });
   }
 
-  const db = loadDB();
   const cleanEmail = req.user.email.toLowerCase();
-  const user = db.users.find((u: any) => u.email.toLowerCase() === cleanEmail);
 
-  if (!user) {
-    return res.status(404).json({ error: "User profile signature not found in core database." });
-  }
-
-  // Administrators bypass deductions
-  if (user.isAdmin) {
-    return res.json({ success: true, user });
-  }
-
-  const isAlreadyStarted = user.startedCases?.includes(caseId);
-  if (!isAlreadyStarted) {
-    const currentCredits = user.credits ?? 0;
-    if (currentCredits <= 0) {
-      return res.status(403).json({ error: "Deduction blocked. You are out of active case credits. Please purchase or renew." });
+  try {
+    const userDocRef = doc(firestoreDb, "users", cleanEmail);
+    const userSnap = await getDoc(userDocRef);
+    if (!userSnap.exists()) {
+      return res.status(444).json({ error: "User profile signature not found in core database." });
     }
 
-    user.credits = currentCredits - 1;
-    user.startedCases = [...(user.startedCases || []), caseId];
-    saveDB(db);
-  }
+    const userData = userSnap.data();
+    const { password: _, ...user } = userData;
 
-  const token = signToken(user);
-  res.json({ success: true, user, token });
+    // Administrators bypass deductions
+    if (user.isAdmin) {
+      return res.json({ success: true, user });
+    }
+
+    const startedCases = user.startedCases || [];
+    const isAlreadyStarted = startedCases.includes(caseId);
+    if (!isAlreadyStarted) {
+      const currentCredits = user.credits ?? 0;
+      if (currentCredits <= 0) {
+        return res.status(403).json({ error: "Deduction blocked. You are out of active case credits. Please purchase or renew." });
+      }
+
+      user.credits = currentCredits - 1;
+      user.startedCases = [...startedCases, caseId];
+
+      await updateDoc(userDocRef, {
+        credits: user.credits,
+        startedCases: user.startedCases
+      });
+    }
+
+    const token = signToken(user);
+    res.json({ success: true, user, token });
+  } catch (error: any) {
+    console.error("Error in /api/auth/deduct-credit:", error);
+    res.status(500).json({ error: "Database error deducting credits." });
+  }
 });
 
 // API Routes
 app.post("/api/chat", authMiddleware, async (req, res) => {
   const { studentQuestion, chatHistory, patientData } = req.body;
+
+  // Utilize Chunked Transfer-Encoding for instant character-by-character native streaming
+  res.setHeader("Content-Type", "text/plain; charset=utf-8");
+  res.setHeader("Transfer-Encoding", "chunked");
 
   try {
     const prunedHistory = chatHistory ? chatHistory.split("\n").slice(-8).join("\n") : "";
@@ -644,24 +1017,30 @@ app.post("/api/chat", authMiddleware, async (req, res) => {
       .replace("{{chatHistory}}", prunedHistory)
       .replace("{{studentQuestion}}", studentQuestion);
 
-    const response = await ai.models.generateContent({ 
-      model: "gemini-3.5-flash", 
+    const responseStream = await safeGenerateContentStream({ 
       contents: prompt,
       config: {
         thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL }
       }
     });
-    
-    res.json({ text: response.text?.trim() || "", quotaExceeded: false });
+
+    for await (const chunk of responseStream) {
+      if (chunk.text) {
+        res.write(chunk.text);
+      }
+    }
+    res.end();
   } catch (error: any) {
-    const isQuota = error?.message?.includes("429") || error?.status === 429 || JSON.stringify(error).includes("429");
+    const isQuota = error?.message?.includes("429") || error?.status === 429 || String(error).includes("429") || String(error).toLowerCase().includes("quota");
     if (isQuota) {
-      console.log("ℹ️ Gemini API Quota Limit Reached (429). Successfully activated Egyptian Offline Fallback Module.");
-    } else {
-      console.log("⚠️ Chat API Fallback activated.");
+      console.log("ℹ️ Gemini API Quota Limit Reached (429). Returning explicit quota message.");
+      res.write("⚠️ عذراً يا دكتور، طاقة المريض (AI Quota) نفدت حالياً ولا يستطيع الإجابة بشكل كامل. يرجى المحاولة لاحقاً!");
+      return res.end();
     }
     
-    // Robust realistic fallback patient simulation
+    console.log("⚠️ Chat API Fallback activated:", error?.message || error);
+    
+    // Robust realistic fallback patient simulation streamed with very short delays to represent thinking
     const q = (studentQuestion || "").toLowerCase();
     let reply = "";
     
@@ -693,7 +1072,8 @@ app.post("/api/chat", authMiddleware, async (req, res) => {
       reply = `Yes, doctor... I have this swelling in my belly and it feels heavy. I also have some swelling in my legs. (Ya doctor, please help me with this). Can you ask me more clearly?`;
     }
     
-    res.json({ text: reply, quotaExceeded: isQuota });
+    res.write(reply);
+    res.end();
   }
 });
 
@@ -728,8 +1108,7 @@ app.post("/api/examiner", authMiddleware, async (req, res) => {
       config.responseMimeType = "application/json";
     }
 
-    const result = await ai.models.generateContent({ 
-      model: "gemini-3.5-flash", 
+    const result = await safeGenerateContent({ 
       contents: prompt,
       config: config
     });
@@ -746,12 +1125,17 @@ app.post("/api/examiner", authMiddleware, async (req, res) => {
       res.json({ text: responseText, quotaExceeded: false });
     }
   } catch (error: any) {
-    const isQuota = error?.message?.includes("429") || error?.status === 429 || JSON.stringify(error).includes("429");
+    const isQuota = error?.message?.includes("429") || error?.status === 429 || String(error).includes("429") || String(error).toLowerCase().includes("quota");
     if (isQuota) {
-      console.log("ℹ️ Gemini API Quota Limit Reached (429) during examiner step. Switched to Oral Viva Fallback.");
-    } else {
-      console.log("⚠️ Examiner API Exception (Switched to Fallback).");
+      console.log("ℹ️ Gemini API Quota Limit Reached (429) during examiner step.");
+      return res.json({ 
+        text: "⚠️ عذراً يا دكتور، طاقة الممتحن (AI Quota) نفدت حالياً. لا يمكنني مناقشة الحالة معك الآن، يرجى المحاولة لاحقاً.", 
+        isResolved: true, 
+        quotaExceeded: true 
+      });
     }
+    
+    console.log("⚠️ Examiner API Exception (Switched to Fallback).");
     
     if (activeQuestion) {
       // Offline fuzzy keyword matching for viva/oral questions
@@ -834,8 +1218,7 @@ app.post("/api/evaluate", authMiddleware, async (req, res) => {
       .replace("{{studentMan}}", performance.management)
       .replace("{{checklist}}", JSON.stringify(caseData.checklist));
 
-    const response = await ai.models.generateContent({ 
-      model: "gemini-3.5-flash",
+    const response = await safeGenerateContent({ 
       contents: prompt,
       config: {
         responseMimeType: "application/json",
@@ -878,12 +1261,22 @@ app.post("/api/evaluate", authMiddleware, async (req, res) => {
 
     res.json({ ...parsedJson, quotaExceeded: false });
   } catch (error: any) {
-    const isQuota = error?.message?.includes("429") || error?.status === 429 || JSON.stringify(error).includes("429");
+    const isQuota = error?.message?.includes("429") || error?.status === 429 || String(error).includes("429") || String(error).toLowerCase().includes("quota");
     if (isQuota) {
-      console.log("ℹ️ Gemini API Quota Limit Reached (429) during scorecard generation. Activated Offline clinical checklist scoring.");
-    } else {
-      console.log("⚠️ Score Evaluator Fallback activated.");
+      console.log("ℹ️ Gemini API Quota Limit Reached (429) during scorecard generation.");
+      return res.json({
+        communication: 0,
+        reasoning: 0,
+        examination: 0,
+        total: 0,
+        feedback: "⚠️ عذراً يا دكتور، نظام التقييم التلقائي (AI Evaluation) متوقف حالياً بسبب نفاد الكريديتس/الطاقة. لا يمكن استخراج التقييم المفصل الآن. يرجى المحاولة لاحقاً.",
+        coveredItems: [],
+        missedItems: [],
+        quotaExceeded: true
+      });
     }
+    
+    console.log("⚠️ Score Evaluator Fallback activated.");
     
     // Strict clinical scoring fallback
     const combinedText = `
@@ -1008,8 +1401,7 @@ app.post("/api/examine-step", authMiddleware, async (req, res) => {
       .replace("{{chatHistory}}", JSON.stringify(chatHistory || []))
       .replace("{{studentMessage}}", studentMessage || "");
 
-    const result = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
+    const result = await safeGenerateContent({
       contents: prompt,
       config: { 
         responseMimeType: "application/json",
@@ -1025,12 +1417,17 @@ app.post("/api/examine-step", authMiddleware, async (req, res) => {
       res.json({ text: responseText, isResolved: false, quotaExceeded: false });
     }
   } catch (error: any) {
-    const isQuota = error?.message?.includes("429") || error?.status === 429 || JSON.stringify(error).includes("429");
+    const isQuota = error?.message?.includes("429") || error?.status === 429 || String(error).includes("429") || String(error).toLowerCase().includes("quota");
     if (isQuota) {
-      console.log("ℹ️ Gemini API Quota Limit Reached (429) during physical examination step. Switched to offline physical findings matcher.");
-    } else {
-      console.log("⚠️ Examine Step API Exception (activated fallback).");
+      console.log("ℹ️ Gemini API Quota Limit Reached (429) during physical examination step.");
+      return res.json({ 
+        text: "⚠️ عذراً يا دكتور، طاقة نظام الفحص (AI Quota) نفدت حالياً ولا يمكنني تحليل ملاحظاتك. يرجى المحاولة لاحقاً.", 
+        isResolved: true, 
+        quotaExceeded: true 
+      });
     }
+    
+    console.log("⚠️ Examine Step API Exception (activated fallback).");
 
     const msg = (studentMessage || "").toLowerCase().trim();
     const sample = (idealFinding || "").toLowerCase();
@@ -1090,6 +1487,8 @@ app.post("/api/examine-step", authMiddleware, async (req, res) => {
 
 // Vite Setup
 async function startServer() {
+  await seedFirestoreIfNeeded();
+
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },

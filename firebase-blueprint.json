@@ -1,0 +1,54 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile with OSCE station enrollment status and credits",
+      "type": "object",
+      "properties": {
+        "fullName": { "type": "string" },
+        "studentId": { "type": "string" },
+        "university": { "type": "string" },
+        "mobile": { "type": "string" },
+        "email": { "type": "string" },
+        "plan": { "type": "string" },
+        "isAdmin": { "type": "boolean" },
+        "isActivated": { "type": "boolean" },
+        "credits": { "type": "number" },
+        "planActivatedAt": { "type": "number" },
+        "planExpiresAt": { "type": "number" },
+        "startedCases": { "type": "array" },
+        "password": { "type": "string" }
+      },
+      "required": ["fullName", "studentId", "university", "mobile", "email", "plan", "isAdmin", "isActivated"]
+    },
+    "Payment": {
+      "title": "Payment",
+      "description": "Payment activation submissions by students",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "studentEmail": { "type": "string" },
+        "studentName": { "type": "string" },
+        "mobile": { "type": "string" },
+        "plan": { "type": "string" },
+        "amount": { "type": "number" },
+        "method": { "type": "string" },
+        "screenshotText": { "type": "string" },
+        "transactionId": { "type": "string" },
+        "timestamp": { "type": "number" },
+        "status": { "type": "string" }
+      },
+      "required": ["id", "studentEmail", "studentName", "plan", "amount", "timestamp", "status"]
+    }
+  },
+  "firestore": {
+    "/users/{email}": {
+      "schema": "User",
+      "description": "Store medical OSCE students registered on the platform"
+    },
+    "/payments/{paymentId}": {
+      "schema": "Payment",
+      "description": "Store subscription payments waiting for admin clearance"
+    }
+  }
+}

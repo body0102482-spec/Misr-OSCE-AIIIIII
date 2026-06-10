@@ -433,18 +433,54 @@ export const HistoryTab: React.FC = () => {
           }),
         });
 
-        const data = await response.json();
-        if (data.quotaExceeded) {
-          setQuotaExceeded(true);
+        if (!response.ok) {
+          const errRes = await response.json().catch(() => ({}));
+          const errMsg = errRes.error || "Communication error with simulation services.";
+          streamPatientMessage(`⚠️ عذراً يا دكتور، حدثت مشكلة في الاتصال بالخادم: (${errMsg}). يرجى التحقق من تسجيل دخولك أو المحاولة مرة أخرى.\n\n[Warning: Session error or connection lost. Please verify you are logged in correctly.]`);
+          return;
         }
-        if (data.text) {
-          streamPatientMessage(data.text);
-        } else {
-          setIsTyping(false);
+
+        const reader = response.body?.getReader();
+        const decoder = new TextDecoder("utf-8");
+        if (!reader) {
+          streamPatientMessage("⚠️ خطأ في قراءة رد المريض من الخادم.");
+          return;
         }
+
+        // First add an empty patient message to start streaming into
+        addMessage({
+          role: "patient",
+          content: "",
+          timestamp: Date.now()
+        });
+
+        setIsTyping(true);
+        let accumulatedText = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const chunkStr = decoder.decode(value, { stream: true });
+          accumulatedText += chunkStr;
+
+          // Push accumulated text straight into state for real-time typewriter-less rendering
+          const currentMessages = [...useStore.getState().messages];
+          if (currentMessages.length > 0) {
+            currentMessages[currentMessages.length - 1] = {
+              ...currentMessages[currentMessages.length - 1],
+              content: accumulatedText
+            };
+            useStore.setState({ messages: currentMessages });
+          }
+
+          if (patientScrollRef.current && isAtPatientTabBottom.current) {
+            patientScrollRef.current.scrollTop = patientScrollRef.current.scrollHeight;
+          }
+        }
+        setIsTyping(false);
       } catch (error) {
         console.error("Chat Error:", error);
-        setIsTyping(false);
+        streamPatientMessage("⚠️ عذراً، يبدو أن هناك خطأ في الاتصال بالشبكة. يرجى التحقق من اتصالك بالإنترنت وإعادة إرسال السؤال.");
       }
     } else {
       // Add student message to UI immediately
@@ -469,6 +505,13 @@ export const HistoryTab: React.FC = () => {
             activeQuestion: activeQuestion
           }),
         });
+
+        if (!response.ok) {
+          const errRes = await response.json().catch(() => ({}));
+          const errMsg = errRes.error || "Communication error with examiner engine.";
+          streamExaminerMessage(`⚠️ خطأ في التواصل مع الممتحن: (${errMsg}). يرجى التحقق من جلسة تسجيل الدخول.\n\n[Examiner Service Error: Try checking your admin credentials or session state.]`);
+          return;
+        }
 
         const data = await response.json();
         if (data.quotaExceeded) {
@@ -501,11 +544,11 @@ export const HistoryTab: React.FC = () => {
             setCurrentQuestionId(null);
           }
         } else {
-          setIsTyping(false);
+          streamExaminerMessage("⚠️ (لم يتم تلقي استجابة من الممتحن. يرجى تجربة إعادة المحاولة.)");
         }
       } catch (error) {
         console.error("Examiner Error:", error);
-        setIsTyping(false);
+        streamExaminerMessage("⚠️ عذراً، خطأ في التواصل مع خادم الممتحن. يرجى إعادة إرسال رسالتك.");
       }
     }
   };
