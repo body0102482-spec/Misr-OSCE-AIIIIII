@@ -242,23 +242,20 @@ export const StationPage: React.FC = () => {
             <motion.div 
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: "auto", opacity: 1 }}
-              className="bg-amber-500 text-white px-6 py-3 flex items-center justify-between border-b border-amber-600 shadow-inner shrink-0 z-10"
+              className="bg-amber-500 text-white px-6 py-2.5 flex items-center justify-between border-b border-amber-600 shadow-inner shrink-0 z-10"
             >
-              <div className="flex items-center gap-3">
-                <Info size={18} className="shrink-0" />
-                <p className="text-xs font-semibold leading-normal text-right" dir="rtl">
-                  <strong>تنبيه تقني (تجاوز الحد المؤقت للـ API):</strong> لقد قمت بإرسال عدة طلبات سريعة وتجاوزت حد خوادم Google المؤقت في الدقيقة (Rate Limit). 
-                  <span className="block mt-0.5 text-[11px] text-amber-100 font-normal">
-                    💡 رصيدك الشخصي من رسائل واشتراك الحالات سليم ومحفوظ بالكامل (لم يُستهلك منه شيء). يرجى الانتظار دقيقة واحدة فقط ثم المحاولة مجدداً وسيعود النموذج للعمل فوراً!
-                  </span>
+              <div className="flex items-center gap-2">
+                <Info size={16} />
+                <p className="text-xs font-semibold leading-normal">
+                  <strong>API Quota Exceeded fallback active:</strong> Daily limit exceeded. Active with zero response delay offline mode.
                 </p>
               </div>
               <button 
                 onClick={() => useStore.getState().setQuotaExceeded(false)}
-                className="text-white hover:text-amber-200 transition-colors p-2 shrink-0 mr-2"
+                className="text-white hover:text-amber-200 transition-colors p-1"
                 title="Dismiss"
               >
-                <X size={16} className="stroke-[3]" />
+                <X size={14} className="stroke-[3]" />
               </button>
             </motion.div>
           )}

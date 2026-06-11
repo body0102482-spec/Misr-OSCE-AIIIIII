@@ -14,13 +14,6 @@ export default function App() {
     const initApp = async () => {
       if (currentUser) {
         await syncUser();
-      } else {
-        // Silent automatic login with default student credentials to ensure the medical simulation engine works instantly
-        try {
-          await loginUser("student@must.edu.eg", "student123", true);
-        } catch (e) {
-          console.error("Silent automatic login failed:", e);
-        }
       }
     };
     initApp();
