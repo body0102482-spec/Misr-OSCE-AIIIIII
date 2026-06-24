@@ -19,6 +19,7 @@ import {
   X
 } from "lucide-react";
 import { useStore } from "../../store/useStore";
+import { OSCELogo } from "../../components/OSCELogo";
 
 // Tabs
 import { HistoryTab } from "./HistoryTab";
@@ -39,9 +40,18 @@ export const StationPage: React.FC = () => {
     tickTimer,
     isExaminerMode,
     toggleExaminerMode,
+    isRandomBlind,
     quotaExceeded,
     resetSession
   } = useStore();
+
+  const handleToggleExaminerMode = () => {
+    if (isRandomBlind && activeTab !== "feedback") {
+      alert("⚠️ يتم قفل بنك الأسألة والتقييم النموذجي أثناء الامتحان العشوائي لضمان التقييم العادل ومحاكاة الاختبار الحقيقية، وسيفتح تلقائياً بعد تقديم تشخيصك النهائي وتسليم الحالة!");
+      return;
+    }
+    toggleExaminerMode();
+  };
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
@@ -70,56 +80,57 @@ export const StationPage: React.FC = () => {
   };
 
   const tabs = [
-    { id: "history", icon: <MessageSquare size={18} />, label: "History" },
-    { id: "examination", icon: <Search size={18} />, label: "Examination" },
-    { id: "investigations", icon: <FlaskConical size={18} />, label: "Investigations" },
-    { id: "diagnosis", icon: <ClipboardCheck size={18} />, label: "Diagnosis" },
-    { id: "feedback", icon: <Award size={18} />, label: "Feedback" },
+    { id: "history", icon: <MessageSquare size={16} />, label: "History" },
+    { id: "examination", icon: <Search size={16} />, label: "Examination" },
+    { id: "investigations", icon: <FlaskConical size={16} />, label: "Investigations" },
+    { id: "diagnosis", icon: <ClipboardCheck size={16} />, label: "Diagnosis" },
+    { id: "feedback", icon: <Award size={16} />, label: "Feedback" },
   ];
 
   return (
-    <div className="flex flex-col h-[100dvh] bg-slate-50 overflow-hidden font-sans">
+    <div className="flex flex-col h-[100dvh] bg-slate-950 overflow-hidden font-sans text-slate-100">
+      
       {/* Header / Navigation Bar */}
-      <nav className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-3 md:px-8 shrink-0 shadow-sm z-20">
-        <div className="flex items-center gap-2 md:gap-3">
+      <nav className="h-16 bg-slate-950 border-b border-white/5 flex items-center justify-between px-4 md:px-8 shrink-0 z-20">
+        <div className="flex items-center gap-3">
           <button 
             onClick={() => setIsSidebarOpen(true)}
-            className="lg:hidden flex items-center justify-center p-2 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 transition-all shrink-0"
-            title="Open Patient Record & Vitals"
+            className="lg:hidden flex items-center justify-center p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 text-slate-300 transition-all shrink-0"
+            title="Open Patient Record"
           >
-            <User size={18} />
+            <User size={16} />
           </button>
-          <div className="hidden xs:flex w-8 h-8 md:w-10 md:h-10 bg-blue-600 rounded-lg items-center justify-center text-white shadow-sm shrink-0">
-            <Stethoscope size={18} className="md:hidden" />
-            <Stethoscope size={22} className="hidden md:block" />
-          </div>
-          <div className="min-w-0">
-            <h1 className="text-sm md:text-lg font-black tracking-tight text-slate-800 leading-tight truncate">OSCE Mentor AI</h1>
-            <p className="text-[8px] md:text-[10px] text-slate-400 font-bold uppercase tracking-widest truncate">{currentCase.name}</p>
+          
+          <div className="min-w-0 text-left">
+            <h1 className="text-sm font-bold text-white leading-tight font-display">Synoza Simulator</h1>
+            <p className="text-[9px] text-slate-400 font-mono uppercase tracking-widest truncate">
+              {isRandomBlind && activeTab !== "feedback" ? "🎲 Blind Exam Case • تخصص عشوائي مخفي" : currentCase.name}
+            </p>
           </div>
         </div>
         
-        <div className="flex items-center gap-1.5 md:gap-6">
+        <div className="flex items-center gap-2 md:gap-4">
           <button 
-            onClick={toggleExaminerMode}
-            className={`flex items-center gap-1.5 px-2 md:px-3 py-1.5 rounded-full text-[9px] md:text-[10px] font-black uppercase tracking-wider transition-all border ${
+            onClick={handleToggleExaminerMode}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[9px] font-bold uppercase tracking-wider transition-all border ${
               isExaminerMode 
-                ? "bg-slate-900 border-slate-900 text-white shadow-lg" 
-                : "bg-white border-slate-200 text-slate-400 hover:border-slate-400"
+                ? "bg-cyan-500 border-cyan-400 text-slate-950 font-black shadow-lg" 
+                : "bg-white/5 border-white/10 text-slate-400 hover:text-white"
             }`}
           >
             <Shield size={10} />
-            <span className="hidden sm:inline">{isExaminerMode ? "Examiner" : "View Examiner"}</span>
-            <span className="sm:hidden">{isExaminerMode ? "Active" : "Examiner"}</span>
+            <span>{isExaminerMode ? "Examiner Mode" : "View Model Guide"}</span>
           </button>
-          <div className="flex items-center gap-1 bg-red-50 text-red-700 px-2.5 md:px-4 py-1.5 md:py-2 rounded-full border border-red-100 shadow-sm shrink-0">
-            <Clock size={12} className="animate-pulse md:w-4 md:h-4" />
-            <span className="font-mono font-bold text-xs md:text-lg leading-none">{formatTime(timer)}</span>
+
+          <div className="flex items-center gap-1.5 bg-red-500/15 text-red-400 px-3.5 py-1.5 rounded-full border border-red-500/20 shrink-0 font-mono">
+            <Clock size={12} className="animate-pulse" />
+            <span className="font-bold text-sm leading-none">{formatTime(timer)}</span>
           </div>
+
           <Link 
             to="/"
             onClick={() => resetSession()}
-            className="bg-slate-800 hover:bg-slate-700 text-white px-3 md:px-5 py-1.5 md:py-2 rounded-xl font-bold text-[10px] md:text-sm transition-all uppercase tracking-wider shadow-sm active:scale-95"
+            className="bg-white/10 hover:bg-red-500 hover:text-white border border-white/5 text-slate-300 px-4 py-1.5 rounded-xl font-bold text-xs transition-all uppercase tracking-wider"
           >
             Quit
           </Link>
@@ -133,67 +144,63 @@ export const StationPage: React.FC = () => {
         {isSidebarOpen && (
           <div 
             onClick={() => setIsSidebarOpen(false)}
-            className="fixed inset-0 bg-slate-950/45 backdrop-blur-xs z-30 lg:hidden cursor-pointer"
+            className="fixed inset-0 bg-slate-950/80 backdrop-blur-xs z-30 lg:hidden cursor-pointer"
           />
         )}
 
         {/* Left Sidebar: Patient Data */}
         <aside className={`
-          fixed inset-y-0 left-0 bg-white border-r border-slate-200 flex flex-col p-6 gap-8 shrink-0 overflow-y-auto z-40 w-[280px] xs:w-[320px] shadow-2xl transition-transform duration-300
+          fixed inset-y-0 left-0 bg-slate-950 border-r border-white/5 flex flex-col p-6 gap-6 shrink-0 overflow-y-auto z-40 w-[280px] transition-transform duration-300 synoza-glass
           ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"}
-          lg:translate-x-0 lg:static lg:z-10 lg:w-[320px] lg:shadow-none lg:flex h-full
+          lg:translate-x-0 lg:static lg:z-10 lg:w-[300px] lg:shadow-none lg:flex h-full
         `}>
           {/* Mobile close button */}
-          <div className="flex items-center justify-between lg:hidden border-b border-slate-100 pb-3">
-            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Patient File</span>
+          <div className="flex items-center justify-between lg:hidden border-b border-white/5 pb-3">
+            <span className="text-[9px] font-mono uppercase tracking-widest text-slate-400">Patient File</span>
             <button 
               onClick={() => setIsSidebarOpen(false)}
-              className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 font-bold text-xs"
+              className="p-1 text-slate-400 hover:text-white font-bold text-xs"
             >
               ✕
             </button>
           </div>
 
           <div className="text-center">
-            <div className="w-24 h-24 bg-slate-100 rounded-full mx-auto mb-3 border-4 border-slate-50 flex items-center justify-center text-slate-400 shadow-inner">
-              <User size={48} strokeWidth={1.5} />
+            <div className="w-16 h-16 bg-white/5 border border-white/10 rounded-full mx-auto mb-3 flex items-center justify-center text-slate-400">
+              <User size={32} strokeWidth={1.5} />
             </div>
-            <h2 className="text-xl font-bold text-slate-800 tracking-tight">{currentCase.patient.name}</h2>
-            <p className="text-xs text-slate-500 font-medium">
-              {currentCase.patient.age} Year Old {currentCase.patient.gender} • Egyptian
+            <h2 className="text-base font-bold text-white tracking-tight">{currentCase.patient.name}</h2>
+            <p className="text-[10px] text-slate-400 font-medium font-mono">
+              {currentCase.patient.age} Y/O {currentCase.patient.gender} • Egyptian
             </p>
           </div>
 
           {isExaminerMode && (
             <motion.div 
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              className="bg-slate-900 text-white p-5 rounded-2xl shadow-xl border border-slate-800"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="bg-slate-900 border border-white/5 p-4 rounded-xl text-left"
             >
-              <div className="flex items-center gap-2 mb-4 text-blue-400">
-                <Shield size={16} />
-                <h3 className="text-[10px] font-black uppercase tracking-[0.2em]">Model Answer Checklist</h3>
+              <div className="flex items-center gap-1.5 mb-3 text-cyan-400">
+                <Shield size={14} />
+                <h3 className="text-[9px] font-mono uppercase tracking-wider">OSCE Examiner Guide</h3>
               </div>
-              <ul className="space-y-3">
+              <ul className="space-y-2 max-h-48 overflow-y-auto pr-1">
                 {currentCase.checklist.map((c, idx) => (
-                  <li key={idx} className="flex gap-3 text-[11px] leading-relaxed">
-                    <div className="mt-1 w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />
-                    <span className="font-medium text-slate-300">
-                      <span className="text-slate-500 font-bold">[{c.category}]</span> {c.item}
+                  <li key={idx} className="flex gap-2 text-[10px] leading-relaxed">
+                    <div className="mt-1 w-1 h-1 rounded-full bg-cyan-500 shrink-0" />
+                    <span className="text-slate-300">
+                      <strong className="text-slate-500">[{c.category}]</strong> {c.item}
                     </span>
                   </li>
                 ))}
               </ul>
-              <div className="mt-6 pt-4 border-t border-slate-800 flex items-center gap-2 text-amber-400">
-                 <Info size={14} />
-                 <span className="text-[10px] font-bold uppercase">Secret Case Guide</span>
-              </div>
             </motion.div>
           )}
 
-          <div className="space-y-4">
-            <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-2">Vital Signs</h3>
-            <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-3 text-left">
+            <h3 className="text-[10px] font-mono text-slate-500 uppercase tracking-widest border-b border-white/5 pb-1">Vital Signs</h3>
+            <div className="grid grid-cols-2 gap-2.5">
               <VitalCard label="BP" value={currentCase.patient.vitals.bp} color="blue" />
               <VitalCard label="HR" value={currentCase.patient.vitals.hr} color="red" />
               <VitalCard label="TEMP" value={currentCase.patient.vitals.temp} color="emerald" />
@@ -201,9 +208,9 @@ export const StationPage: React.FC = () => {
             </div>
           </div>
 
-          <div className="space-y-4">
-            <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-2">Station Progress</h3>
-            <div className="space-y-2">
+          <div className="space-y-3 text-left">
+            <h3 className="text-[10px] font-mono text-slate-500 uppercase tracking-widest border-b border-white/5 pb-1">Station Progress</h3>
+            <div className="space-y-1.5">
               {tabs.map((tab, i) => {
                 const isActive = activeTab === tab.id;
                 const isCompleted = tabs.findIndex(t => t.id === activeTab) > i;
@@ -211,24 +218,24 @@ export const StationPage: React.FC = () => {
                 return (
                   <div 
                     key={tab.id}
-                    className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${
+                    className={`flex items-center gap-2.5 p-2 rounded-lg border transition-all ${
                       isCompleted 
-                        ? "bg-emerald-50 border-emerald-100 text-emerald-700" 
+                        ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400" 
                         : isActive
-                          ? "bg-blue-50 border-blue-200 text-blue-700 font-bold shadow-sm"
-                          : "bg-slate-50 border-slate-200 text-slate-600 opacity-60"
+                          ? "bg-white/10 border-cyan-500/20 text-white font-bold"
+                          : "bg-transparent border-transparent text-slate-500"
                     }`}
                   >
                     {isCompleted ? (
-                      <CheckCircle2 size={18} className="shrink-0" />
+                      <CheckCircle2 size={14} className="shrink-0" />
                     ) : (
-                      <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center text-[10px] shrink-0 ${
-                        isActive ? "border-blue-600 bg-blue-600 text-white" : "border-slate-300"
+                      <div className={`w-4 h-4 rounded-full border flex items-center justify-center text-[8px] font-mono shrink-0 ${
+                        isActive ? "border-cyan-400 bg-cyan-500 text-slate-950 font-black" : "border-slate-700 text-slate-500"
                       }`}>
                         {i + 1}
                       </div>
                     )}
-                    <span className="text-sm">{tab.label}</span>
+                    <span className="text-xs">{tab.label}</span>
                   </div>
                 );
               })}
@@ -237,44 +244,31 @@ export const StationPage: React.FC = () => {
         </aside>
 
         {/* Right Interaction Area */}
-        <main className="flex-1 flex flex-col bg-slate-50 overflow-hidden">
+        <main className="flex-1 flex flex-col bg-slate-950/40 overflow-hidden">
           {quotaExceeded && (
-            <motion.div 
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: "auto", opacity: 1 }}
-              className="bg-amber-500 text-white px-6 py-2.5 flex items-center justify-between border-b border-amber-600 shadow-inner shrink-0 z-10"
-            >
+            <div className="bg-amber-500 text-slate-950 px-4 py-2 flex items-center justify-between shrink-0 z-10 font-mono text-[10px] font-bold">
               <div className="flex items-center gap-2">
-                <Info size={16} />
-                <p className="text-xs font-semibold leading-normal">
-                  <strong>API Quota Exceeded fallback active:</strong> Daily limit exceeded. Active with zero response delay offline mode.
-                </p>
+                <Info size={14} />
+                <span>Bilingual Dialogue Parser active in zero-delay model offline backup.</span>
               </div>
-              <button 
-                onClick={() => useStore.getState().setQuotaExceeded(false)}
-                className="text-white hover:text-amber-200 transition-colors p-1"
-                title="Dismiss"
-              >
-                <X size={14} className="stroke-[3]" />
-              </button>
-            </motion.div>
+            </div>
           )}
 
           {/* Tabs Bar */}
-          <div className="flex px-6 pt-4 bg-white border-b border-slate-200 gap-8 shrink-0 overflow-x-auto scrollbar-hide">
+          <div className="flex px-6 pt-3 bg-slate-950 border-b border-white/5 gap-6 shrink-0 overflow-x-auto scrollbar-hide">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as any)}
-                className={`pb-4 border-b-2 font-bold text-sm transition-all relative flex items-center gap-2 shrink-0 ${
+                className={`pb-3 border-b-2 font-bold text-xs transition-all relative flex items-center gap-1.5 shrink-0 ${
                   activeTab === tab.id
-                    ? "border-blue-600 text-blue-600"
-                    : "border-transparent text-slate-400 hover:text-slate-800"
+                    ? "border-cyan-500 text-white"
+                    : "border-transparent text-slate-500 hover:text-slate-300"
                 }`}
               >
                 {(tab.id === "history" || tab.id === "examination" || tab.id === "investigations") ? (
                   <motion.div
-                    animate={{ x: [-3, 3, -3] }}
+                    animate={{ y: [-1, 1, -1] }}
                     transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }}
                   >
                     {tab.icon}
@@ -283,8 +277,8 @@ export const StationPage: React.FC = () => {
                 {tab.label}
                 {activeTab === tab.id && (
                   <motion.div 
-                    layoutId="activeTab"
-                    className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600"
+                    layoutId="activeTabIndicator"
+                    className="absolute bottom-0 left-0 right-0 h-0.5 bg-cyan-500"
                   />
                 )}
               </button>
@@ -296,10 +290,10 @@ export const StationPage: React.FC = () => {
             <AnimatePresence mode="wait">
               <motion.div
                 key={activeTab}
-                initial={{ opacity: 0, y: 10 }}
+                initial={{ opacity: 0, y: 5 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.2 }}
+                exit={{ opacity: 0, y: -5 }}
+                transition={{ duration: 0.15 }}
                 className={`h-full ${activeTab === "history" ? "flex flex-col overflow-hidden" : ""}`}
               >
                 {activeTab === "history" && <HistoryTab />}
@@ -318,25 +312,16 @@ export const StationPage: React.FC = () => {
 
 const VitalCard = ({ label, value, color }: { label: string, value: string, color: 'blue' | 'red' | 'emerald' | 'amber' }) => {
   const styles = {
-    blue: "bg-blue-50 border-blue-100 text-blue-600 text-blue-900",
-    red: "bg-red-50 border-red-100 text-red-600 text-red-900",
-    emerald: "bg-emerald-50 border-emerald-100 text-emerald-600 text-emerald-900",
-    amber: "bg-amber-50 border-amber-100 text-amber-600 text-amber-900",
+    blue: "bg-blue-500/5 border-blue-500/15 text-blue-400",
+    red: "bg-red-500/5 border-red-500/15 text-red-400",
+    emerald: "bg-emerald-500/5 border-emerald-500/15 text-emerald-400",
+    amber: "bg-amber-500/5 border-amber-500/15 text-amber-400",
   };
 
-  const [bg, border, textMuted, textDark] = styles[color].split(' ');
-
   return (
-    <div className={`p-3 ${bg} rounded-xl border ${border} shadow-sm transition-transform hover:scale-[1.02]`}>
-      <p className={`text-[10px] ${textMuted} uppercase font-bold tracking-wider mb-1`}>{label}</p>
-      <p className={`text-lg font-black ${textDark} leading-tight`}>{value}</p>
+    <div className={`p-3 ${styles[color]} rounded-xl border transition-transform duration-300 hover:scale-[1.02] text-left`}>
+      <p className="text-[9px] uppercase font-mono font-bold opacity-60 mb-0.5">{label}</p>
+      <p className="text-sm font-bold font-mono">{value}</p>
     </div>
   );
 };
-
-const VitalItem = ({ label, value }: { label: string, value: string }) => (
-  <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
-    <span className="text-[9px] font-bold text-slate-400 uppercase block mb-1">{label}</span>
-    <span className="text-xs font-black text-slate-800">{value}</span>
-  </div>
-);

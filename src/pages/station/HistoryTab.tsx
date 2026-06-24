@@ -5,6 +5,38 @@ import { useStore } from "../../store/useStore";
 import { VoiceRecognition, LangMode } from "../../components/VoiceRecognition";
 import { Message } from "../../types";
 
+function renderMessageContent(content: string) {
+  const regex = /\[SHOW_IMAGE:\s*([^\]]+)\]/i;
+  const match = content.match(regex);
+  
+  if (match) {
+    const imageName = match[1].trim();
+    const cleanContent = content.replace(regex, "").trim();
+    
+    return (
+      <div className="space-y-3">
+        {cleanContent && <p className="text-xs leading-relaxed font-semibold">{cleanContent}</p>}
+        <div className="mt-2 rounded-xl overflow-hidden border border-white/5 bg-slate-950/80 p-1 relative group max-w-[280px]">
+          <img 
+            src={`/${imageName}`} 
+            alt="Clinical Specimen" 
+            className="w-full h-auto max-h-40 object-cover rounded-lg group-hover:scale-[1.02] transition-transform duration-300"
+            referrerPolicy="no-referrer"
+            onError={(e) => {
+              (e.target as any).style.display = "none";
+            }}
+          />
+          <div className="absolute bottom-2 right-2 px-1 py-0.5 bg-slate-950/90 text-[7px] text-cyan-400 font-mono tracking-widest uppercase rounded border border-white/5">
+            MUST SPECIMEN
+          </div>
+        </div>
+      </div>
+    );
+  }
+  
+  return <p className="text-xs leading-relaxed font-semibold">{content}</p>;
+}
+
 export const HistoryTab: React.FC = () => {
   const { 
     currentCase, 
@@ -554,22 +586,22 @@ export const HistoryTab: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col h-full bg-slate-50/50 overflow-hidden min-h-0">
+    <div className="flex flex-col h-full bg-slate-950 overflow-hidden min-h-0">
       
       {/* Top Tab Bar Switcher (Centered & Slimmer) */}
-      <div className="bg-white border-b border-slate-200/80 p-2 sm:p-2.5 shrink-0 shadow-sm z-10 w-full">
+      <div className="bg-slate-950 border-b border-white/5 p-2 sm:p-2.5 shrink-0 z-10 w-full">
          <div className="max-w-4xl mx-auto flex gap-2">
            <button
              type="button"
              onClick={() => setChatTarget("patient")}
              className={`flex-1 flex flex-col sm:flex-row items-center justify-center gap-1.5 sm:gap-2 py-1.5 px-3 rounded-xl border transition-all duration-200 cursor-pointer ${
                chatTarget === "patient"
-                 ? "bg-blue-50/60 border-blue-200 text-blue-700 shadow-xs ring-1 ring-blue-100"
-                 : "bg-slate-55 border-slate-200 text-slate-500 hover:bg-slate-100/80 hover:text-slate-700"
+                 ? "bg-cyan-500/10 border-cyan-500/20 text-cyan-400 shadow-sm"
+                 : "bg-white/5 border-white/5 text-slate-500 hover:bg-white/10 hover:text-slate-300"
              }`}
            >
              <div className={`p-1 rounded-lg transition-colors shrink-0 ${
-               chatTarget === "patient" ? "bg-blue-600 text-white" : "bg-slate-200 text-slate-600"
+               chatTarget === "patient" ? "bg-cyan-500 text-slate-950 font-bold" : "bg-white/5 text-slate-400"
              }`}>
                <User size={16} className="sm:w-[18px] sm:h-[18px]" strokeWidth={2.2} />
              </div>
@@ -588,12 +620,12 @@ export const HistoryTab: React.FC = () => {
              onClick={() => setChatTarget("examiner")}
              className={`flex-1 flex flex-col sm:flex-row items-center justify-center gap-1.5 sm:gap-2 py-1.5 px-3 rounded-xl border transition-all duration-200 cursor-pointer ${
                chatTarget === "examiner"
-                 ? "bg-slate-900 border-slate-950 text-white shadow-md shadow-slate-900/10"
-                 : "bg-slate-55 border-slate-200 text-slate-500 hover:bg-slate-100/80 hover:text-slate-700"
+                 ? "bg-cyan-500/10 border-cyan-500/20 text-cyan-400 shadow-sm"
+                 : "bg-white/5 border-white/5 text-slate-500 hover:bg-white/10 hover:text-slate-300"
              }`}
            >
              <div className={`p-1 rounded-lg transition-colors shrink-0 ${
-               chatTarget === "examiner" ? "bg-slate-800 text-blue-400" : "bg-slate-200 text-slate-600"
+               chatTarget === "examiner" ? "bg-cyan-500 text-slate-950 font-bold" : "bg-white/5 text-slate-400"
              }`}>
                <Shield size={16} className="sm:w-[18px] sm:h-[18px]" strokeWidth={2.2} />
              </div>
@@ -610,15 +642,15 @@ export const HistoryTab: React.FC = () => {
       </div>
 
       {/* Single Shared Chat Box Container */}
-      <div className="flex-1 overflow-hidden relative min-h-0 bg-white">
+      <div className="flex-1 overflow-hidden relative min-h-0 bg-slate-950">
         <div className="max-w-4xl mx-auto h-full flex flex-col overflow-hidden">
           
           {chatTarget === "patient" ? (
             /* Patient Interview Chat */
             <div className="flex flex-col flex-1 h-full overflow-hidden min-h-0">
-              <div className="p-3 bg-white border-b border-slate-100 flex items-center justify-between shrink-0">
+              <div className="p-3 bg-slate-900/40 border-b border-white/5 flex items-center justify-between shrink-0">
                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Interview Log: {currentCase?.patient?.name}</span>
+                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest leading-none">Interview Log: {currentCase?.patient?.name}</span>
                  </div>
                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
               </div>
@@ -626,7 +658,7 @@ export const HistoryTab: React.FC = () => {
               <div 
                 ref={patientScrollRef}
                 onScroll={handlePatientScroll}
-                className="flex-1 overflow-y-auto min-h-0 p-4 md:p-6 space-y-4 md:space-y-6 scroll-smooth bg-slate-50/20 pb-6"
+                className="flex-1 overflow-y-auto min-h-0 p-4 md:p-6 space-y-4 md:space-y-6 scroll-smooth bg-slate-950 pb-6"
               >
                 {messages.length === 0 && (
                   <div className="text-center py-12 flex flex-col items-center">
@@ -647,22 +679,22 @@ export const HistoryTab: React.FC = () => {
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     className={`flex ${msg.role === "student" ? "justify-end" : "justify-start"}`}
                   >
-                    <div className={`max-w-[85%] rounded-[1.5rem] p-4 shadow-sm border transition-all ${
+                    <div className={`max-w-[85%] rounded-2xl p-3.5 shadow-sm border transition-all ${
                       msg.role === "student" 
-                        ? "bg-blue-600 text-white border-blue-500 rounded-tr-none shadow-blue-200/50 shadow-md" 
-                        : "bg-slate-50 text-slate-700 border-slate-200 rounded-tl-none"
+                        ? "bg-white/10 text-white border-white/10 rounded-tr-none" 
+                        : "bg-slate-900/60 text-slate-200 border-white/5 rounded-tl-none"
                     }`}>
-                      <p className="text-sm leading-relaxed font-medium">{msg.content}</p>
+                      {renderMessageContent(msg.content)}
                     </div>
                   </motion.div>
                 ))}
 
                 {isTyping && chatTarget === "patient" && (
                   <div className="flex justify-start">
-                    <div className="bg-slate-100 border border-slate-200 rounded-2xl rounded-tl-none p-3 shadow-sm flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
-                      <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
-                      <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce"></span>
+                    <div className="bg-white/5 border border-white/5 rounded-2xl rounded-tl-none p-3 shadow-sm flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
+                      <span className="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
+                      <span className="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-bounce"></span>
                     </div>
                   </div>
                 )}
@@ -670,10 +702,10 @@ export const HistoryTab: React.FC = () => {
             </div>
           ) : (
             /* Examiner Assessment Chat */
-            <div className="flex flex-col flex-1 h-full overflow-hidden min-h-0 bg-slate-50/30">
-              <div className="p-3 bg-slate-900 border-b border-slate-800 flex items-center justify-between shrink-0">
+            <div className="flex flex-col flex-1 h-full overflow-hidden min-h-0 bg-slate-950">
+              <div className="p-3 bg-slate-900 border-b border-white/5 flex items-center justify-between shrink-0">
                  <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 bg-slate-800 rounded-md flex items-center justify-center text-blue-400 border border-slate-700">
+                    <div className="w-6 h-6 bg-white/5 rounded-md flex items-center justify-center text-cyan-400 border border-white/10">
                        <Shield size={12} />
                     </div>
                     <span className="text-[10px] font-black text-white uppercase tracking-widest leading-none">Examiner Board</span>
@@ -816,11 +848,11 @@ export const HistoryTab: React.FC = () => {
               <div 
                 ref={examinerScrollRef}
                 onScroll={handleExaminerScroll}
-                className="flex-1 overflow-y-auto min-h-0 p-4 md:p-6 space-y-4 md:space-y-6 scroll-smooth pb-6"
+                className="flex-1 overflow-y-auto min-h-0 p-4 md:p-6 space-y-4 md:space-y-6 scroll-smooth bg-slate-950 pb-6"
               >
                 {examinerMessages.length === 0 && (
                   <div className="text-center py-12 flex flex-col items-center">
-                    <div className="bg-slate-900 p-4 rounded-2xl shadow-md mb-4 border border-slate-800 flex items-center justify-center text-blue-400">
+                    <div className="bg-white/5 p-4 rounded-2xl shadow-md mb-4 border border-white/5 flex items-center justify-center text-cyan-400">
                       <Shield size={28} strokeWidth={1.5} />
                     </div>
                     <h3 className="text-sm font-black text-slate-300 tracking-tight mb-1">Examiner Observation</h3>
@@ -830,29 +862,29 @@ export const HistoryTab: React.FC = () => {
                   </div>
                 )}
 
-                {examinerMessages.map((msg, i) => (
+                 {examinerMessages.map((msg, i) => (
                   <motion.div
                     key={i}
                     initial={{ opacity: 0, x: 10, scale: 0.98 }}
                     animate={{ opacity: 1, x: 0, scale: 1 }}
                     className={`flex ${msg.role === "student" ? "justify-end" : "justify-start"}`}
                   >
-                    <div className={`max-w-[85%] rounded-[1.5rem] p-4 shadow-sm border transition-all ${
+                    <div className={`max-w-[85%] rounded-2xl p-3.5 shadow-sm border transition-all ${
                       msg.role === "student" 
-                        ? "bg-slate-800 text-white border-slate-700 rounded-tr-none" 
-                        : "bg-blue-900/10 text-blue-900 border-blue-200/50 rounded-tl-none italic font-bold"
+                        ? "bg-white/10 text-white border-white/10 rounded-tr-none" 
+                        : "bg-cyan-950/15 text-cyan-400 border-cyan-500/10 rounded-tl-none font-bold"
                     }`}>
-                      <p className="text-sm leading-relaxed">{msg.content}</p>
+                      {renderMessageContent(msg.content)}
                     </div>
                   </motion.div>
                 ))}
                 
                 {isTyping && chatTarget === "examiner" && (
                   <div className="flex justify-start">
-                    <div className="bg-slate-800 border border-slate-700 rounded-2xl p-3 shadow-sm flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
-                      <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
-                      <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce"></span>
+                    <div className="bg-white/5 border border-white/5 rounded-2xl p-3 shadow-sm flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
+                      <span className="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
+                      <span className="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-bounce"></span>
                     </div>
                   </div>
                 )}
@@ -864,27 +896,27 @@ export const HistoryTab: React.FC = () => {
       </div>
 
       {/* Unified Input Control */}
-      <div className="relative bg-white border-t border-slate-200 p-4 md:p-5 shrink-0 shadow-[0_-4px_16px_rgba(0,0,0,0.06)] w-full z-10">
+      <div className="relative bg-slate-950 border-t border-white/5 p-4 md:p-5 shrink-0 w-full z-10">
         <div className="max-w-4xl mx-auto flex flex-col gap-3">
-           <div className="flex items-center justify-between gap-y-2 border-b border-slate-100 pb-2.5">
+           <div className="flex items-center justify-between gap-y-2 border-b border-white/5 pb-2.5">
               <div className="flex items-center gap-3 md:gap-4">
-                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
-                    <Activity size={12} className="text-blue-500" /> Options
+                 <span className="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1">
+                    <Activity size={12} className="text-cyan-400" /> Options
                  </span>
 
-                 <div className="flex items-center gap-1.5 bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+                 <div className="flex items-center gap-1.5 bg-white/5 p-0.5 rounded-lg border border-white/5">
                     <VoiceRecognition langMode={langMode} onLangModeChange={setLangMode} hideSelector={true} 
                       onTranscript={(text) => setInputText(prev => prev + (prev ? " " : "") + text)} 
                       disabled={isTyping}
                     />
-                    <div className="h-4 w-px bg-slate-300 mx-0.5"></div>
+                    <div className="h-4 w-px bg-white/10 mx-0.5"></div>
                     <button 
                       type="button"
                       onClick={() => setLangMode("auto")}
                       className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md transition-all uppercase cursor-pointer border-none ${
                         langMode === "auto" 
-                          ? "bg-white text-blue-600 shadow-xs border border-slate-200" 
-                          : "text-slate-500 hover:text-slate-800 bg-transparent"
+                          ? "bg-cyan-500 text-slate-950 shadow-xs" 
+                          : "text-slate-400 hover:text-white bg-transparent"
                       }`}
                     >
                       Auto
@@ -894,8 +926,8 @@ export const HistoryTab: React.FC = () => {
                       onClick={() => setLangMode("ar-EG")}
                       className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md transition-all uppercase cursor-pointer border-none ${
                         langMode === "ar-EG" 
-                          ? "bg-white text-blue-600 shadow-xs border border-slate-200" 
-                          : "text-slate-500 hover:text-slate-800 bg-transparent"
+                          ? "bg-cyan-500 text-slate-950 shadow-xs" 
+                          : "text-slate-400 hover:text-white bg-transparent"
                       }`}
                     >
                       Arabic
@@ -905,8 +937,8 @@ export const HistoryTab: React.FC = () => {
                       onClick={() => setLangMode("en-US")}
                       className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md transition-all uppercase cursor-pointer border-none ${
                         langMode === "en-US" 
-                          ? "bg-white text-blue-600 shadow-xs border border-slate-200" 
-                          : "text-slate-500 hover:text-slate-800 bg-transparent"
+                          ? "bg-cyan-500 text-slate-950 shadow-xs" 
+                          : "text-slate-400 hover:text-white bg-transparent"
                       }`}
                     >
                       English
@@ -919,7 +951,7 @@ export const HistoryTab: React.FC = () => {
                      type="button"
                      onClick={() => triggerNextQuestion()}
                      disabled={!currentCase?.examinerQuestions || currentCase.examinerQuestions.length === 0}
-                     className="bg-amber-500 hover:bg-amber-600 hover:scale-105 active:scale-95 text-slate-150 px-2.5 py-1.5 rounded-xl transition-all shadow-sm flex items-center justify-center gap-1 shrink-0 disabled:opacity-50 cursor-pointer border-none font-sans text-[10px] font-bold text-slate-950"
+                     className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 px-2.5 py-1.5 rounded-xl transition-all shadow-sm flex items-center justify-center gap-1 shrink-0 disabled:opacity-50 cursor-pointer border-none font-sans text-[10px] font-bold"
                      title="Ask question from file"
                    >
                      <BookOpen size={12} strokeWidth={2.5} />
@@ -927,7 +959,7 @@ export const HistoryTab: React.FC = () => {
                    </button>
                  )}
               </div>
-              <span className="hidden sm:flex text-[10px] font-black text-slate-400 uppercase tracking-widest items-center gap-1.5">
+              <span className="hidden sm:flex text-[10px] font-mono font-bold text-slate-500 uppercase tracking-widest items-center gap-1.5">
                  <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></div>
                  Active
               </span>
@@ -940,9 +972,7 @@ export const HistoryTab: React.FC = () => {
                 onChange={(e) => setInputText(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleSendMessage(inputText)}
                 placeholder={chatTarget === "patient" ? "Ask the patient..." : "Ask the examiner..."}
-                className={`flex-1 bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-[16px] font-semibold text-slate-800 placeholder:text-slate-400 focus:bg-white focus:ring-2 transition-all outline-none ${
-                  chatTarget === "examiner" ? "focus:ring-slate-900/10 focus:border-slate-800" : "focus:ring-blue-500/10 focus:border-blue-500"
-                }`}
+                className="flex-1 bg-white/5 border border-white/5 rounded-2xl px-4 py-3 text-[15px] font-semibold text-white placeholder:text-slate-500 focus:bg-white/10 focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 transition-all outline-none"
                 style={{ fontSize: "16px" }}
                 disabled={isTyping}
               />
@@ -950,9 +980,7 @@ export const HistoryTab: React.FC = () => {
                 <button
                   onClick={() => handleSendMessage(inputText)}
                   disabled={!inputText.trim() || isTyping}
-                  className={`text-white p-3.5 rounded-2xl disabled:opacity-50 transition-all shadow-md active:scale-95 flex items-center justify-center shrink-0 cursor-pointer border-none ${
-                    chatTarget === "examiner" ? "bg-slate-900 hover:bg-slate-800" : "bg-blue-600 hover:bg-blue-700"
-                  }`}
+                  className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 p-3.5 rounded-2xl disabled:opacity-50 transition-all active:scale-95 flex items-center justify-center shrink-0 cursor-pointer border-none"
                 >
                   <Send size={18} strokeWidth={2.5} />
                 </button>

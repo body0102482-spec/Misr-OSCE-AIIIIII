@@ -304,7 +304,7 @@ const MAJOR_CATEGORIES = [
   },
   {
     id: "obs_gynae",
-    nameEn: "OBS & GYNAE",
+    nameEn: "OBS & GYN",
     nameAr: "النساء والتوليد",
     icon: Dna,
     color: "purple",

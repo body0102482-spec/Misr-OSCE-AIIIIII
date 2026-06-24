@@ -1,6 +1,6 @@
 {
-  "name": "OSCE Mentor AI",
-  "description": "An AI-powered clinical exam simulator for Egyptian medical students.",
+  "name": "Synoza",
+  "description": "An AI-powered medical OSCE training platform. Building clinical connections.",
   "requestFramePermissions": ["microphone"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

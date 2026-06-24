@@ -4,6 +4,10 @@ export interface Case {
   specialty: string;
   difficulty: "Easy" | "Medium" | "Hard";
   time: string;
+  category?: string;
+  subcategory?: string;
+  planRequired?: string;
+  image?: string;
   patient: {
     name: string;
     age: number;
@@ -65,6 +69,7 @@ export interface Case {
     question: string;
     sampleAnswer: string;
   }[];
+  description?: string;
 }
 
 export interface Message {
@@ -86,6 +91,7 @@ export interface User {
   planExpiresAt?: number;
   planActivatedAt?: number;
   startedCases?: string[];
+  completedStations?: string[];
   token?: string;
 }
 

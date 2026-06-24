@@ -57,6 +57,20 @@ testFirestoreConnection();
 const app = express();
 app.use(express.json());
 
+// Enable CORS middleware for split frontend/backend deployment
+app.use((req, res, next) => {
+  const origin = req.headers.origin || "*";
+  res.setHeader("Access-Control-Allow-Origin", origin);
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.setHeader("Access-Control-Allow-Credentials", "true");
+  
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
+  next();
+});
+
 const ai = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY || "",
   httpOptions: {
@@ -87,31 +101,47 @@ async function safeGenerateContent(args: {
       delete attemptConfig.thinkingConfig;
     }
 
-    try {
-      console.log(`🤖 Attempting content generation with model: ${modelObj.name}`);
-      const result = await ai.models.generateContent({
-        model: modelObj.name,
-        contents: args.contents,
-        config: attemptConfig,
-      });
-      console.log(`✅ Content generation succeeded using model: ${modelObj.name}`);
-      return result;
-    } catch (error: any) {
-      lastError = error;
-      const status = error?.status || error?.statusCode || (error?.error && error?.error?.status);
-      const errorStr = (error?.message || String(error)).toLowerCase();
-      
-      console.warn(`⚠️ Model "${modelObj.name}" failed: status=${status}, message="${errorStr.substring(0, 200)}".`);
+    const maxRetries = 3;
+    for (let retry = 0; retry < maxRetries; retry++) {
+      try {
+        console.log(`🤖 Attempting content generation with model: ${modelObj.name} (Attempt ${retry + 1}/${maxRetries})`);
+        const result = await ai.models.generateContent({
+          model: modelObj.name,
+          contents: args.contents,
+          config: attemptConfig,
+        });
+        console.log(`✅ Content generation succeeded using model: ${modelObj.name}`);
+        return result;
+      } catch (error: any) {
+        lastError = error;
+        const status = error?.status || error?.statusCode || (error?.error && error?.error?.status);
+        const errorStr = (error?.message || String(error)).toLowerCase();
+        
+        console.warn(`⚠️ Model "${modelObj.name}" failed (Attempt ${retry + 1}/${maxRetries}): status=${status}, message="${errorStr.substring(0, 200)}".`);
 
-      const isQuota = status === 429 || errorStr.includes("429") || errorStr.includes("quota") || errorStr.includes("limit");
-      if (isQuota) {
-        console.log("ℹ️ Account quota error detected. Instantly breaking lookup loop to prevent retry latency.");
+        const isQuota = status === 429 || errorStr.includes("429") || errorStr.includes("quota") || errorStr.includes("limit");
+        if (isQuota) {
+          console.log("ℹ️ Account quota error detected. Instantly breaking lookup loop to prevent retry latency.");
+          return Promise.reject(error);
+        }
+
+        const isRetryable = status === 503 || status === 502 || status === 504 || status === 500 ||
+          errorStr.includes("high demand") || errorStr.includes("temporary") || errorStr.includes("overloaded") || 
+          errorStr.includes("server error") || errorStr.includes("econnreset") || errorStr.includes("socket");
+
+        if (isRetryable && retry < maxRetries - 1) {
+          const delay = (retry + 1) * 300;
+          console.log(`🔄 Transient error or high demand detected. Retrying model ${modelObj.name} in ${delay}ms...`);
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          continue;
+        }
+
         break;
       }
-
-      // Wait a tiny bit (150ms) before fallback
-      await new Promise((resolve) => setTimeout(resolve, 150));
     }
+
+    // Wait a tiny bit (150ms) before fallback
+    await new Promise((resolve) => setTimeout(resolve, 150));
   }
 
   throw lastError;
@@ -138,31 +168,47 @@ async function safeGenerateContentStream(args: {
       delete attemptConfig.thinkingConfig;
     }
 
-    try {
-      console.log(`🤖 Attempting stream content generation with model: ${modelObj.name}`);
-      const stream = await ai.models.generateContentStream({
-        model: modelObj.name,
-        contents: args.contents,
-        config: attemptConfig,
-      });
-      console.log(`✅ Stream content generation initiated successfully using model: ${modelObj.name}`);
-      return stream;
-    } catch (error: any) {
-      lastError = error;
-      const status = error?.status || error?.statusCode || (error?.error && error?.error?.status);
-      const errorStr = (error?.message || String(error)).toLowerCase();
-      
-      console.warn(`⚠️ Stream model "${modelObj.name}" failed: status=${status}, message="${errorStr.substring(0, 200)}".`);
+    const maxRetries = 3;
+    for (let retry = 0; retry < maxRetries; retry++) {
+      try {
+        console.log(`🤖 Attempting stream content generation with model: ${modelObj.name} (Attempt ${retry + 1}/${maxRetries})`);
+        const stream = await ai.models.generateContentStream({
+          model: modelObj.name,
+          contents: args.contents,
+          config: attemptConfig,
+        });
+        console.log(`✅ Stream content generation initiated successfully using model: ${modelObj.name}`);
+        return stream;
+      } catch (error: any) {
+        lastError = error;
+        const status = error?.status || error?.statusCode || (error?.error && error?.error?.status);
+        const errorStr = (error?.message || String(error)).toLowerCase();
+        
+        console.warn(`⚠️ Stream model "${modelObj.name}" failed (Attempt ${retry + 1}/${maxRetries}): status=${status}, message="${errorStr.substring(0, 200)}".`);
 
-      const isQuota = status === 429 || errorStr.includes("429") || errorStr.includes("quota") || errorStr.includes("limit");
-      if (isQuota) {
-        console.log("ℹ️ Account stream quota error detected. Instantly breaking stream loop to prevent retry latency.");
+        const isQuota = status === 429 || errorStr.includes("429") || errorStr.includes("quota") || errorStr.includes("limit");
+        if (isQuota) {
+          console.log("ℹ️ Account stream quota error detected. Instantly breaking stream loop to prevent retry latency.");
+          return Promise.reject(error);
+        }
+
+        const isRetryable = status === 503 || status === 502 || status === 504 || status === 500 ||
+          errorStr.includes("high demand") || errorStr.includes("temporary") || errorStr.includes("overloaded") || 
+          errorStr.includes("server error") || errorStr.includes("econnreset") || errorStr.includes("socket");
+
+        if (isRetryable && retry < maxRetries - 1) {
+          const delay = (retry + 1) * 300;
+          console.log(`🔄 Transient error or high demand detected (Stream). Retrying model ${modelObj.name} in ${delay}ms...`);
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          continue;
+        }
+
         break;
       }
-
-      // Wait a tiny bit (150ms) before fallback
-      await new Promise((resolve) => setTimeout(resolve, 150));
     }
+
+    // Wait a tiny bit (150ms) before fallback
+    await new Promise((resolve) => setTimeout(resolve, 150));
   }
 
   throw lastError;
@@ -1503,9 +1549,9 @@ async function startServer() {
     });
   }
 
-  const PORT = 3000;
+  const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`Server running on port ${PORT}`);
   });
 }
 

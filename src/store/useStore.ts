@@ -3,6 +3,7 @@ import { Case, Message, User, PaymentSubmission } from "../types";
 
 interface OSCEState {
   currentCase: Case | null;
+  isRandomBlind: boolean;
   messages: Message[];
   examinerMessages: Message[];
   timer: number;
@@ -37,6 +38,8 @@ interface OSCEState {
     sampleAnswer: string;
   }[];
   quotaExceeded: boolean;
+  theme: "light" | "dark" | "system";
+  setTheme: (theme: "light" | "dark" | "system") => void;
 
   // Authenticaton & Database Extensions
   currentUser: User | null;
@@ -46,6 +49,7 @@ interface OSCEState {
 
   // Actions
   setCurrentCase: (c: Case) => void;
+  setIsRandomBlind: (val: boolean) => void;
   addMessage: (m: Message) => void;
   addExaminerMessage: (m: Message) => void;
   startTimer: () => void;
@@ -210,6 +214,7 @@ const initialData = getInitialState();
 
 export const useStore = create<OSCEState>((set, get) => ({
   currentCase: null,
+  isRandomBlind: false,
   messages: [],
   examinerMessages: [],
   timer: 0,
@@ -230,6 +235,25 @@ export const useStore = create<OSCEState>((set, get) => ({
   askedQuestionIds: [],
   vivaAttempts: [],
   quotaExceeded: false,
+  theme: (typeof window !== "undefined" && localStorage.getItem("osce-theme") as "light" | "dark" | "system") || "light",
+  setTheme: (t) => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("osce-theme", t);
+      const root = document.documentElement;
+      let activeTheme = t;
+      if (t === "system") {
+        activeTheme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      }
+      if (activeTheme === "dark") {
+        root.classList.add("dark");
+        root.classList.remove("light");
+      } else {
+        root.classList.add("light");
+        root.classList.remove("dark");
+      }
+    }
+    set({ theme: t });
+  },
 
   // Lists
   currentUser: initialData.curUser,
@@ -238,6 +262,7 @@ export const useStore = create<OSCEState>((set, get) => ({
   allCases: [], // Lazily filled in CaseSelection or Components
 
   setCurrentCase: (c) => set({ currentCase: c }),
+  setIsRandomBlind: (isRandomBlind) => set({ isRandomBlind }),
   addMessage: (m) => set((state) => ({ messages: [...state.messages, m] })),
   addExaminerMessage: (m) => set((state) => ({ examinerMessages: [...state.examinerMessages, m] })),
   startTimer: () => set({ isTimerRunning: true }),
@@ -282,6 +307,7 @@ export const useStore = create<OSCEState>((set, get) => ({
         },
         score: null,
         isExaminerMode: false,
+        isRandomBlind: false,
         currentQuestionId: null,
         askedQuestionIds: [],
         vivaAttempts: [],
@@ -487,20 +513,40 @@ export const useStore = create<OSCEState>((set, get) => ({
   fetchAdminStats: async () => {
     const user = get().currentUser;
     if (user && user.isAdmin && user.token) {
-      try {
-        const res = await fetch("/api/admin/system-stats", {
-          headers: { "Authorization": `Bearer ${user.token}` }
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.success) {
-            set({ usersList: data.users, paymentsList: data.payments });
-            localStorage.setItem("osce-users", JSON.stringify(data.users));
-            localStorage.setItem("osce-payments", JSON.stringify(data.payments));
+      let attempts = 3;
+      let delay = 400;
+      for (let i = 0; i < attempts; i++) {
+        try {
+          const res = await fetch("/api/admin/system-stats", {
+            headers: { "Authorization": `Bearer ${user.token}` }
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.success) {
+              set({ usersList: data.users, paymentsList: data.payments });
+              localStorage.setItem("osce-users", JSON.stringify(data.users));
+              localStorage.setItem("osce-payments", JSON.stringify(data.payments));
+              return;
+            }
+          } else {
+            console.warn(`Admin stats fetch attempt ${i + 1} returned status: ${res.status}`);
+          }
+        } catch (err) {
+          if (i === attempts - 1) {
+            console.log("ℹ️ [Admin Stats] Resolving offline/warmup state with localStorage cache fallback.");
+            const savedUsers = localStorage.getItem("osce-users");
+            const savedPayments = localStorage.getItem("osce-payments");
+            if (savedUsers && savedPayments) {
+              set({
+                usersList: JSON.parse(savedUsers),
+                paymentsList: JSON.parse(savedPayments)
+              });
+            }
+          } else {
+            await new Promise(resolve => setTimeout(resolve, delay));
+            delay *= 2;
           }
         }
-      } catch (err) {
-        console.error("Admin stats fetch failed:", err);
       }
     }
   }

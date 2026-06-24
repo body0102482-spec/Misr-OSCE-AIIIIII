@@ -13,6 +13,8 @@ import {
   Sliders,
   DollarSign, 
   ListFilter, 
+  Calendar,
+  Info,
   Briefcase, 
   TrendingUp, 
   HelpCircle,
@@ -32,11 +34,24 @@ import {
   PhoneCall,
   Video,
   FileAudio,
-  AlertCircle
+  AlertCircle,
+  Shuffle,
+  Activity,
+  Mic,
+  Settings,
+  Sun,
+  Moon,
+  Laptop,
+  ChevronDown,
+  Scissors,
+  Baby,
+  Heart
 } from "lucide-react";
 import { useStore } from "../store/useStore";
 import { Case } from "../types";
 import { motion, AnimatePresence } from "motion/react";
+import { OSCELogo } from "../components/OSCELogo";
+import { QBankDashboard } from "../components/QBankDashboard";
 import { 
   ascitesCase, 
   copdCase, 
@@ -63,8 +78,12 @@ export const StudentDashboard: React.FC = () => {
     verifyPayment,
     addCase,
     editCase,
-    fetchAdminStats
+    fetchAdminStats,
+    theme,
+    setTheme
   } = useStore();
+
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
 
   useEffect(() => {
     if (!currentUser) {
@@ -75,6 +94,7 @@ export const StudentDashboard: React.FC = () => {
   }, [currentUser]);
 
   // UI state
+  const [activeMainView, setActiveMainView] = useState<"osce" | "qbank" | "analytics" | "subscription" | "settings">("osce");
   const [activeSpecialty, setActiveSpecialty] = useState<string>("internal_medicine");
   const [activeSubspecialty, setActiveSubspecialty] = useState<string>("gastroenterology");
   const [selectedCaseForDetails, setSelectedCaseForDetails] = useState<Case | null>(null);
@@ -103,10 +123,49 @@ export const StudentDashboard: React.FC = () => {
   const [editingCaseObj, setEditingCaseObj] = useState<any | null>(null);
   const [isCaseEditorOpen, setIsCaseEditorOpen] = useState(false);
 
+  // Random Case specialties selection state
+  const [selectCardio, setSelectCardio] = useState(true);
+  const [selectChest, setSelectChest] = useState(true);
+  const [selectAbdomen, setSelectAbdomen] = useState(true);
+
   // Auto fallback to free plan if none exists
   const activePlan = currentUser?.plan || "FREE PLAN";
 
   if (!currentUser) return null;
+
+  // Subscription statistics and counters
+  const startedCount = currentUser?.startedCases?.length || 0;
+  const remainingCount = currentUser?.credits ?? 0;
+  const totalCasesForPlan = currentUser?.isAdmin
+    ? 99999
+    : activePlan === "PREMIUM PLAN"
+    ? 400
+    : activePlan === "PRO PLAN"
+    ? 200
+    : activePlan === "BASIC PLAN"
+    ? 75
+    : 0;
+
+  const progressPercent = currentUser?.isAdmin
+    ? 100
+    : totalCasesForPlan > 0
+    ? Math.min(100, Math.round((startedCount / totalCasesForPlan) * 100))
+    : 0;
+
+  const formatExpiryDate = (timestamp?: number) => {
+    if (currentUser?.isAdmin) return "مفتوح (أدمن)";
+    if (!timestamp || activePlan === "FREE PLAN") return "لا توجد باقة";
+    try {
+      const date = new Date(timestamp);
+      return date.toLocaleDateString("en-GB", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric"
+      });
+    } catch {
+      return "—";
+    }
+  };
 
   // Compile active cases available
   const coreCasesList = [
@@ -378,108 +437,52 @@ export const StudentDashboard: React.FC = () => {
 
   const allActiveCases = [...coreCasesList, ...getCustomCases()];
 
-  const handleStartOSCE = (c: Case) => {
+  const handleStartOSCE = (c: Case, isBlind: boolean = false) => {
     // 1. Is this the free case?
     const isFreeCase = c.id === "cardio-asdm" || c.id === "AS*MR-001" || c.name.toLowerCase().includes("aortic stenosis") || c.name.toLowerCase().includes("as + mr");
     
     if (isFreeCase) {
       resetSession();
       setCurrentCase(c);
+      if (isBlind) {
+        useStore.setState({ isRandomBlind: true });
+      }
       navigate("/station");
       return;
     }
 
-    // 2. Administrator override
+    // 2. Access checks
+    let allowed = false;
     if (currentUser.isAdmin) {
-      resetSession();
-      setCurrentCase(c);
-      navigate("/station");
-      return;
-    }
+      allowed = true;
+    } else {
+      const userPlan = currentUser.plan || "FREE PLAN";
+      const reqPlan = (c as any).planRequired || "BASIC PLAN";
 
-    // 3. Plan validity validation (expiration)
-    const now = Date.now();
-    const isExpired = currentUser.planExpiresAt && now > currentUser.planExpiresAt;
-    
-    if (isExpired) {
-      setAuthErrorModal({
-        title: "Subscription Validity Expired",
-        message: `Your subscription plan (${currentUser.plan}) has expired. Unused credits expire when the plan validity ends. Please purchase or renew a subscription package to continue preparing.`
-      });
-      return;
-    }
-
-    if (activePlan === "FREE PLAN") {
-      setAuthErrorModal({
-        title: "Specialty Station Locked",
-        message: "You are currently on the FREE PLAN, which grants access only to the Free AS + MR (Aortic Stenosis & Mitral Regurgitation) examination block. To practice this station, please select of one of our affordable EGP subscription packages below."
-      });
-      return;
-    }
-
-    // 4. Plan authorization constraints (Specialty Access)
-    const requiredPlan = (c as any).planRequired || "BASIC PLAN";
-    let isAuthorized = false;
-    
-    if (activePlan === "BASIC PLAN") {
-      if (requiredPlan === "BASIC PLAN" || requiredPlan === "FREE PLAN") {
-        isAuthorized = true;
+      if (userPlan === "FREE PLAN") {
+        allowed = false;
+      } else if (userPlan === "BASIC PLAN") {
+        allowed = (reqPlan === "BASIC PLAN" || reqPlan === "FREE PLAN");
+      } else if (userPlan === "PRO PLAN") {
+        allowed = (reqPlan !== "PREMIUM PLAN");
+      } else if (userPlan === "PREMIUM PLAN") {
+        allowed = true;
       }
-    } else if (activePlan === "PRO PLAN") {
-      if (requiredPlan === "PRO PLAN" || requiredPlan === "BASIC PLAN" || requiredPlan === "FREE PLAN") {
-        isAuthorized = true;
-      }
-    } else if (activePlan === "PREMIUM PLAN") {
-      isAuthorized = true;
     }
 
-    if (!isAuthorized) {
+    if (!allowed) {
       setAuthErrorModal({
-        title: "Specialty Access Limited",
-        message: `This station is calibrated for the ${requiredPlan}. Your current subscription status (${activePlan}) is insufficient. Please choose an upgrade from the package cards below.`
+        title: "Clinical Station Restricted",
+        message: `This station requires a ${(c as any).planRequired || "BASIC"} tier. Your current rank is ${currentUser.plan || "FREE PLAN"}. Upgrade instantly under the 'Billing' tab in the left sidebar!`
       });
       return;
     }
 
-    // 5. Case Credit check & Deduction rules
-    const isAlreadyStarted = currentUser.startedCases?.includes(c.id);
-    
-    if (!isAlreadyStarted) {
-      const currentCredits = currentUser.credits ?? 0;
-      if (currentCredits <= 0) {
-        setAuthErrorModal({
-          title: "Out of Case Credits",
-          message: "You have used up all your active OSCE case credits (1 credit is deducted per newly started case). You can still continue reviewing your previously unlocked stations for free! To practice a new case, please upgrade or renew your plan below."
-        });
-        return;
-      }
-
-      // Deduct exactly 1 credit for new OSCE case
-      const nextCredits = currentCredits - 1;
-      const nextStartedCases = [...(currentUser.startedCases || []), c.id];
-      
-      const updatedActiveUser = {
-        ...currentUser,
-        credits: nextCredits,
-        startedCases: nextStartedCases
-      };
-
-      // Sync globally
-      const updatedUsersList = usersList.map((u) => {
-        if (u.email.toLowerCase() === currentUser.email.toLowerCase()) {
-          return updatedActiveUser;
-        }
-        return u;
-      });
-
-      useStore.setState({ usersList: updatedUsersList });
-      localStorage.setItem("osce-users", JSON.stringify(updatedUsersList));
-      setCurrentUser(updatedActiveUser);
-    }
-
-    // Enter the station!
     resetSession();
     setCurrentCase(c);
+    if (isBlind) {
+      useStore.setState({ isRandomBlind: true });
+    }
     navigate("/station");
   };
 
@@ -514,19 +517,17 @@ export const StudentDashboard: React.FC = () => {
 
   // Categories helper
   const specialties = [
-    { id: "internal_medicine", name: "Internal Medicine", arabic: "الطب الباطني", color: "border-blue-200 text-blue-700 bg-blue-50" },
-    { id: "surgery", name: "General Surgery", arabic: "الجراحة العامة", color: "border-red-200 text-red-700 bg-red-50", isSoon: true },
-    { id: "pediatrics", name: "Pediatrics", arabic: "طب الأطفال", color: "border-emerald-200 text-emerald-700 bg-emerald-50", isSoon: true },
-    { id: "ob_gyn", name: "OB / GYN", arabic: "النساء والتوليد", color: "border-amber-200 text-amber-700 bg-amber-50", isSoon: true }
+    { id: "internal_medicine", name: "Internal Medicine", sub: "Medicine cases", icon: Stethoscope },
+    { id: "surgery", name: "General Surgery", sub: "Surgical cases", icon: Scissors, isSoon: true },
+    { id: "pediatrics", name: "Pediatrics", sub: "Pediatric cases", icon: Baby, isSoon: true },
+    { id: "ob_gyn", name: "OBS & GYN", sub: "Maternity cases", icon: Heart, isSoon: true }
   ];
 
   const subspecialtiesMapping: Record<string, { id: string; name: string; icon: string }[]> = {
     internal_medicine: [
-      { id: "gastroenterology", name: "Gastroenterology (مستشفى الباطنة)", icon: "🩺" },
-      { id: "cardiology", name: "Cardiology & Chest (أمراض القلب)", icon: "❤️" },
-      { id: "chest", name: "Pulmonary & Respiratory (الصدرية)", icon: "💨" },
-      { id: "endocrinology", name: "Endocrinology (الغدد الصماء)", icon: "🩸" },
-      { id: "nephrology", name: "Nephrology (الكلى)", icon: "💧" }
+      { id: "gastroenterology", name: "Gastroenterology", icon: "🥯" },
+      { id: "cardiology", name: "Cardiology", icon: "❤️" },
+      { id: "chest", name: "Pulmonary", icon: "💨" }
     ]
   };
 
@@ -536,1230 +537,1220 @@ export const StudentDashboard: React.FC = () => {
   );
 
   return (
-    <div className="h-[100dvh] overflow-hidden bg-slate-50 flex flex-col font-sans text-slate-800 selection:bg-blue-100">
+    <div className="h-[100dvh] overflow-hidden bg-slate-950 flex font-sans text-slate-100 selection:bg-cyan-550/25 selection:text-cyan-200">
       
-      {/* Dynamic Header Navbar */}
-      <header className="h-20 bg-white border-b border-slate-200 flex items-center justify-between px-6 sm:px-10 sticky top-0 z-30 shadow-sm shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="w-11 h-11 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-md shadow-blue-200">
-            <Stethoscope size={24} />
-          </div>
-          <div>
-            <h1 className="text-xl font-black text-slate-900 tracking-tight leading-none">OSCE Mentor AI</h1>
-            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">MUST University Rotations Portal</span>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-4">
+      {/* LEFT-DOCK SPATIAL SIDEBAR */}
+      <aside className="w-64 border-r border-white/5 bg-slate-950 flex flex-col justify-between p-5 shrink-0 z-20">
+        <div className="space-y-6">
+          <OSCELogo size="md" variant="white" className="px-1" />
           
-          {/* Admin Toggler button */}
-          {currentUser.isAdmin && (
-            <button
-              onClick={() => setIsAdminView(!isAdminView)}
-              className={`px-4 py-2 text-xs font-black rounded-xl border uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer ${
-                isAdminView 
-                  ? "bg-slate-900 border-slate-900 text-white shadow-md"
-                  : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
-              }`}
+          {/* Student Status Profile Badge */}
+          <div className="relative">
+            <button 
+              onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
+              className="w-full bg-slate-900/60 border border-white/5 hover:border-white/10 hover:bg-white/5 p-4 rounded-xl space-y-3 relative overflow-hidden synoza-glass transition-all hover:scale-[1.01] active:scale-[0.99] text-left cursor-pointer group flex flex-col"
             >
-              <Sliders size={14} />
-              {isAdminView ? "Exit Admin Panel" : "Admin Panel"}
-              {paymentsList.some(p => p.status === "Pending") && (
-                <span className="w-2.5 h-2.5 bg-red-500 rounded-full animate-ping"></span>
-              )}
-            </button>
-          )}
-
-          <div className="hidden sm:flex flex-col items-end text-right">
-            <span className="text-xs font-black text-slate-900 leading-tight block">{currentUser.fullName}</span>
-            <span className="text-[9px] text-slate-400 font-bold tracking-tight block">ID: {currentUser.studentId} • {currentUser.email}</span>
-          </div>
-
-          <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-100 text-blue-600 font-black flex items-center justify-center shadow-inner uppercase">
-            {currentUser.fullName.split(" ").map(w => w[0]).slice(0, 2).join("")}
-          </div>
-
-          <button 
-            onClick={() => logoutUser()}
-            className="text-xs text-red-600 hover:text-red-800 hover:underline font-bold transition-all p-1"
-          >
-            Sign Out
-          </button>
-        </div>
-      </header>
-
-      {/* Main Body */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-10 space-y-10 overflow-y-auto">
-        
-        {/* Admin Dashboard Active UI Panel overlay */}
-        <AnimatePresence mode="wait">
-          {isAdminView && (
-            <motion.div 
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: "auto", opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              className="bg-slate-900 text-white rounded-3xl p-6 sm:p-8 border border-slate-800 shadow-2xl relative overflow-hidden"
-            >
-              <div className="absolute top-0 right-0 w-64 h-64 bg-blue-600/5 rounded-full filter blur-3xl pointer-events-none"></div>
-              
-              <div className="flex flex-col md:flex-row md:items-center justify-between pb-6 border-b border-slate-800 gap-4">
-                <div>
-                  <span className="px-3 py-1 bg-blue-900/40 border border-blue-800 text-blue-400 text-[9px] font-black uppercase tracking-widest rounded-full inline-block mb-2">
-                    Superuser Console
-                  </span>
-                  <h2 className="text-2xl font-black text-white tracking-tight">OSCE Hub Control Room</h2>
-                  <p className="text-xs text-slate-400">Review student registrations, active plans, verify incoming payments, and calibrate OSCE clinical cases/checklist metrics.</p>
+              <div className="flex items-center justify-between w-full">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-teal-500 to-indigo-500 text-slate-950 font-black flex items-center justify-center uppercase text-xs">
+                    {currentUser.fullName.split(" ").map((w: any) => w[0]).slice(0, 2).join("")}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-white truncate">{currentUser.fullName}</p>
+                    <p className="text-[9px] text-slate-400 truncate">ID: {currentUser.studentId}</p>
+                  </div>
                 </div>
-
-                <div className="flex gap-2 shrink-0 bg-slate-850 p-1.5 rounded-xl border border-slate-800">
-                  <button 
-                    onClick={() => setAdminTab("students")}
-                    className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${adminTab === "students" ? "bg-blue-600 text-white" : "text-slate-400 hover:text-white"}`}
-                  >
-                    Students ({usersList.length})
-                  </button>
-                  <button 
-                    onClick={() => setAdminTab("payments")}
-                    className={`px-3 py-1.5 text-xs font-bold rounded-lg relative transition-all ${adminTab === "payments" ? "bg-blue-600 text-white" : "text-slate-400 hover:text-white"}`}
-                  >
-                    Payments
-                    {paymentsList.filter(p => p.status === "Pending").length > 0 && (
-                      <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[8px] font-black w-4.5 h-4.5 rounded-full flex items-center justify-center">
-                        {paymentsList.filter(p => p.status === "Pending").length}
-                      </span>
-                    )}
-                  </button>
-                  <button 
-                    onClick={() => setAdminTab("stations")}
-                    className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${adminTab === "stations" ? "bg-blue-600 text-white" : "text-slate-400 hover:text-white"}`}
-                  >
-                    Stations & Assets
-                  </button>
-                </div>
+                <ChevronDown size={14} className={`text-slate-400 group-hover:text-white transition-transform duration-300 ${isProfileMenuOpen ? 'rotate-180' : ''}`} />
               </div>
 
-              {/* Admin Tab Contents */}
-              <div className="pt-6 min-h-[220px]">
-                
-                {/* 1. Students Tab */}
-                {adminTab === "students" && (
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-xs font-black uppercase tracking-wider text-slate-400">Registered Students Database</h3>
-                      <span className="text-[10px] text-slate-550">Double-persistent JSON Collections</span>
-                    </div>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left text-xs text-slate-300">
-                        <thead>
-                          <tr className="border-b border-slate-800 text-slate-400">
-                            <th className="py-2.5 font-bold uppercase tracking-wider">Full Name</th>
-                            <th className="py-2.5 font-bold uppercase tracking-wider">Student ID</th>
-                            <th className="py-2.5 font-bold uppercase tracking-wider">Credits</th>
-                            <th className="py-2.5 font-bold uppercase tracking-wider">Expiry Date</th>
-                            <th className="py-2.5 font-bold uppercase tracking-wider">Active Plan</th>
-                            <th className="py-2.5 font-bold uppercase tracking-wider text-right">Instant Re-Plan</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-850">
-                          {usersList.map((stu, i) => (
-                            <tr key={i} className="hover:bg-slate-850/50">
-                              <td className="py-3 font-semibold text-white flex items-center gap-2">
-                                <span className={`w-2 h-2 rounded-full ${stu.isAdmin ? 'bg-red-400' : 'bg-blue-400'}`}></span>
-                                {stu.fullName} {stu.isAdmin && <span className="text-[8px] border border-red-800 text-red-400 px-1 rounded uppercase font-black">Admin</span>}
-                              </td>
-                              <td className="py-3 font-mono text-slate-400">{stu.studentId}</td>
-                              <td className="py-3 font-mono font-bold text-emerald-400">
-                                {stu.isAdmin ? "Unlimited" : (stu.plan === "FREE PLAN" ? 0 : (stu.credits ?? 0))}
-                              </td>
-                              <td className="py-3 text-slate-400">
-                                {stu.isAdmin ? "Lifetime" : (stu.plan === "FREE PLAN" ? "—" : (stu.planExpiresAt ? new Date(stu.planExpiresAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—"))}
-                              </td>
-                              <td className="py-3">
-                                <span className={`px-2 py-0.5 rounded-full text-[9px] font-black ${
-                                  stu.plan === "PRO PLAN" ? "bg-cyan-950 text-cyan-400 border border-cyan-900" :
-                                  stu.plan === "PREMIUM PLAN" ? "bg-amber-950 text-amber-400 border border-amber-900" :
-                                  stu.plan === "BASIC PLAN" ? "bg-blue-950 text-blue-400 border border-blue-900" :
-                                  "bg-slate-800 text-slate-400"
-                                }`}>
-                                  {stu.plan}
-                                </span>
-                              </td>
-                              <td className="py-3 text-right">
-                                <div className="inline-flex gap-1">
-                                  {["FREE PLAN", "BASIC PLAN", "PRO PLAN", "PREMIUM PLAN"].map((planName) => (
-                                    <button
-                                      key={planName}
-                                      onClick={() => {
-                                        const cleanEmail = stu.email.toLowerCase();
-                                        let planCredits = 0;
-                                        let validityMs = 0;
-                                        if (planName === "BASIC PLAN") {
-                                          planCredits = 75;
-                                          validityMs = 2 * 30 * 24 * 3600 * 1000;
-                                        } else if (planName === "PRO PLAN") {
-                                          planCredits = 200;
-                                          validityMs = 4 * 30 * 24 * 3600 * 1000;
-                                        } else if (planName === "PREMIUM PLAN") {
-                                          planCredits = 400;
-                                          validityMs = 6 * 30 * 24 * 3600 * 1000;
-                                        }
-                                        const now = Date.now();
-                                        const planExpiresAt = planName === "FREE PLAN" ? 0 : now + validityMs;
+              <div className="pt-2 border-t border-white/5 flex items-center justify-between w-full">
+                <span className="text-[8px] font-mono uppercase text-slate-400 tracking-wider">Active rank:</span>
+                <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${
+                  activePlan === "PREMIUM PLAN" ? "bg-amber-500/20 text-amber-300 border border-amber-500/30" :
+                  activePlan === "PRO PLAN" ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/30" :
+                  activePlan === "BASIC PLAN" ? "bg-indigo-500/20 text-indigo-300 border border-indigo-500/30" :
+                  "bg-slate-800 text-slate-400 border border-white/5"
+                }`}>
+                  {activePlan.split(" ")[0]}
+                </span>
+              </div>
+            </button>
 
-                                        const updatedUsers = usersList.map((u) => {
-                                          if (u.email.toLowerCase() === cleanEmail) {
-                                            return { 
-                                              ...u, 
-                                              plan: planName as any,
-                                              credits: planCredits,
-                                              planActivatedAt: now,
-                                              planExpiresAt: planExpiresAt,
-                                              startedCases: u.startedCases || []
-                                            };
-                                          }
-                                          return u;
-                                        });
-                                        useStore.setState({ usersList: updatedUsers });
-                                        localStorage.setItem("osce-users", JSON.stringify(updatedUsers));
-                                        
-                                        // If active user updated
-                                        if (currentUser.email.toLowerCase() === cleanEmail) {
-                                          useStore.getState().setCurrentUser({ 
-                                            ...currentUser, 
-                                            plan: planName as any,
-                                            credits: planCredits,
-                                            planActivatedAt: now,
-                                            planExpiresAt: planExpiresAt,
-                                            startedCases: currentUser.startedCases || []
-                                          });
-                                        }
-                                      }}
-                                      className={`px-1.5 py-0.5 text-[8px] font-bold rounded hover:bg-slate-700 transition-colors uppercase ${
-                                        stu.plan === planName ? "bg-blue-600 text-white" : "bg-slate-800 text-slate-450"
-                                      }`}
-                                    >
-                                      {planName.split(" ")[0]}
-                                    </button>
-                                  ))}
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-
-                {/* 2. Payments Tab */}
-                {adminTab === "payments" && (
-                  <div className="space-y-4">
-                    <h3 className="text-xs font-black uppercase tracking-wider text-slate-400">Vodafone & InstaPay Student Transfer Inbox</h3>
-                    {paymentsList.length === 0 ? (
-                      <p className="text-slate-500 text-xs">No payment notifications submitted yet.</p>
-                    ) : (
-                      <div className="space-y-3">
-                        {paymentsList.map((pay, i) => (
-                          <div key={i} className="bg-slate-850 border border-slate-800 p-4 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
-                            <div>
-                              <div className="flex items-center gap-2 mb-1">
-                                <span className="font-bold text-sm text-white">{pay.studentName}</span>
-                                <span className="text-xs text-slate-500">({pay.studentEmail})</span>
-                                <span className={`px-2 py-0.5 rounded-full text-[9px] font-black ${
-                                  pay.status === "Approved" ? "bg-emerald-950 text-emerald-400 border border-emerald-900" :
-                                  pay.status === "Declined" ? "bg-red-950 text-red-400 border border-red-900" :
-                                  "bg-amber-950 text-amber-400 border border-amber-900 animate-pulse"
-                                }`}>
-                                  {pay.status}
-                                </span>
-                              </div>
-                              <p className="text-xs text-slate-400 leading-normal">
-                                Requested Plan: <strong className="text-blue-400">{pay.plan}</strong> • Transferring via <strong className="text-slate-200">{pay.method}</strong> from mobile <strong className="text-slate-200">{pay.mobile}</strong>
-                              </p>
-                              {pay.screenshotText && (
-                                <p className="text-[11px] text-amber-400 font-mono mt-1 pt-1 border-t border-slate-800">
-                                  {pay.screenshotText}
-                                </p>
-                              )}
-                              <p className="text-[10px] text-slate-500 font-mono mt-0.5">
-                                Transaction ID: <span className="text-white bg-slate-800 px-1 py-0.2 rounded font-sans font-bold">{pay.transactionId}</span> • Submitted: {new Date(pay.timestamp).toLocaleString()}
-                              </p>
-                            </div>
-
-                            {pay.status === "Pending" && (
-                              <div className="flex gap-2 shrink-0">
-                                <button
-                                  onClick={() => verifyPayment(pay.id, "Approved")}
-                                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-black uppercase transition-colors cursor-pointer"
-                                >
-                                  ✔ Approve & Auto-Activate
-                                </button>
-                                <button
-                                  onClick={() => verifyPayment(pay.id, "Declined")}
-                                  className="px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white rounded-lg text-xs font-black uppercase transition-colors cursor-pointer"
-                                >
-                                  ✖ Decline Request
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        ))}
+            {/* Elegant Floating Profile Menu */}
+            <AnimatePresence>
+              {isProfileMenuOpen && (
+                <>
+                  {/* Click outside backdrop closer */}
+                  <div 
+                    className="fixed inset-0 z-40" 
+                    onClick={() => setIsProfileMenuOpen(false)}
+                  />
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                    transition={{ duration: 0.2 }}
+                    className="absolute bottom-24 left-0 w-full bg-slate-900 border border-white/10 rounded-2xl p-4 shadow-2xl z-50 synoza-glass space-y-4"
+                  >
+                    <div className="flex items-center gap-3 border-b border-white/5 pb-3">
+                      <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-teal-500 to-indigo-500 text-slate-950 font-black flex items-center justify-center uppercase text-sm shrink-0">
+                        {currentUser.fullName.split(" ").map((w: any) => w[0]).slice(0, 2).join("")}
                       </div>
-                    )}
-                  </div>
-                )}
+                      <div className="min-w-0 text-left">
+                        <p className="text-xs font-bold text-white truncate">{currentUser.fullName}</p>
+                        <p className="text-[10px] text-slate-400 truncate">{currentUser.email}</p>
+                        <p className="text-[9px] text-slate-500 truncate font-mono">ID: {currentUser.studentId}</p>
+                      </div>
+                    </div>
 
-                {/* 3. Stations & Case Customizer Tab */}
-                {adminTab === "stations" && (
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-xs font-black uppercase tracking-wider text-slate-400">Live Clinical Case Parameters Editor</h3>
+                    {/* Theme Switcher inside Profile Menu */}
+                    <div className="space-y-2">
+                      <p className="text-[9px] font-mono uppercase text-slate-500 tracking-wider text-left">Theme Preference</p>
+                      <div className="grid grid-cols-3 gap-1 bg-slate-950/50 p-1 border border-white/5 rounded-xl">
+                        <button
+                          onClick={() => setTheme("light")}
+                          className={`py-1.5 rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                            theme === "light"
+                              ? "bg-white/10 text-white"
+                              : "text-slate-500 hover:text-white"
+                          }`}
+                          title="Light Mode"
+                        >
+                          <Sun size={12} className="transition-transform duration-500 hover:rotate-45" />
+                          <span>Light</span>
+                        </button>
+                        <button
+                          onClick={() => setTheme("dark")}
+                          className={`py-1.5 rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                            theme === "dark"
+                              ? "bg-white/10 text-white"
+                              : "text-slate-500 hover:text-white"
+                          }`}
+                          title="Dark Mode"
+                        >
+                          <Moon size={12} className="transition-transform duration-500 hover:-rotate-12" />
+                          <span>Dark</span>
+                        </button>
+                        <button
+                          onClick={() => setTheme("system")}
+                          className={`py-1.5 rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                            theme === "system"
+                              ? "bg-white/10 text-white"
+                              : "text-slate-500 hover:text-white"
+                          }`}
+                          title="System Preference"
+                        >
+                          <Laptop size={12} className="transition-transform duration-300 hover:scale-110" />
+                          <span>Sys</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="border-t border-white/5 pt-3 space-y-1 text-left">
                       <button
                         onClick={() => {
-                          setEditingCaseObj({
-                            id: `custom-${Date.now()}`,
-                            name: "New Gastroenterology Station Variant",
-                            specialty: "Gastroenterology",
-                            difficulty: "Medium",
-                            time: "10 mins",
-                            category: "internal_medicine",
-                            subcategory: "gastroenterology",
-                            patient: {
-                              name: "Sayed Aly",
-                              age: 50,
-                              gender: "Male",
-                              occupation: "Civil servant",
-                              chiefComplaint: "My belly is increasing in size, doctor.",
-                              vitals: { bp: "120/80", hr: "80", rr: "16", temp: "37 C", oxygen: "98%" }
-                            },
-                            history: {
-                              presentIllness: "Gradual belly swelling over 3 months, with mild lower limb edema.",
-                              pastHistory: "Known Chronic Hepatitis B sufferer.",
-                              drugHistory: "Takes Tenofovir regularly.",
-                              familyHistory: "Negative.",
-                              socialHistory: "Farmer origin."
-                            },
-                            examination: {
-                              inspection: "No scars, mild distension.",
-                              palpation: "Pleasant firm liver border palpable.",
-                              percussion: "Traube's Space tympanic resonance preserved.",
-                              auscultation: "No rubs audible."
-                            },
-                            investigations: [],
-                            diagnosis: {
-                              provisional: "Early Cirrhotic portal progression",
-                              differentials: ["Fatty infiltration", "Liver mass"],
-                              management: "Regular ultrasound screenings."
-                            },
-                            checklist: [
-                              { item: "Ask about compliance with viral medication", category: "History" }
-                            ]
-                          } as any);
-                          setIsCaseEditorOpen(true);
+                          setActiveMainView("settings");
+                          setIsProfileMenuOpen(false);
                         }}
-                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
+                        className="w-full py-1.5 px-2.5 rounded-lg hover:bg-white/5 text-[11px] font-medium text-slate-300 hover:text-white flex items-center gap-2 transition-colors cursor-pointer"
                       >
-                        <PlusCircle size={14} /> Add Custom Station
+                        <Settings size={12} />
+                        Calibration & settings
+                      </button>
+                      <button
+                        onClick={() => {
+                          logoutUser();
+                          setIsProfileMenuOpen(false);
+                        }}
+                        className="w-full py-1.5 px-2.5 rounded-lg hover:bg-red-500/10 hover:text-red-400 text-[11px] font-medium text-slate-400 flex items-center gap-2 transition-colors cursor-pointer"
+                      >
+                        <ShieldAlert size={12} />
+                        Sign out of Terminal
                       </button>
                     </div>
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
+          </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {allActiveCases.map((cs) => (
-                        <div key={cs.id} className="bg-slate-850 p-4 border border-slate-800 rounded-xl flex items-center justify-between">
-                          <div>
-                            <p className="text-xs font-black text-white">{cs.name}</p>
-                            <span className="text-[9px] text-slate-400 uppercase tracking-widest">{cs.specialty} • {cs.difficulty}</span>
-                            <p className="text-[10px] text-slate-500 mt-1 italic max-w-sm truncate">{(cs as any).description || "Fully simulated clinical checkups"}</p>
-                          </div>
-                          
-                          <div className="flex gap-1.5 shrink-0">
-                            <button
-                              onClick={() => {
-                                setEditingCaseObj(cs as any);
-                                setIsCaseEditorOpen(true);
-                              }}
-                              className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded border border-slate-750 transition-colors"
-                              title="Edit Case Attributes"
-                            >
-                              <Edit3 size={13} />
-                            </button>
-                            <button
-                              onClick={() => {
-                                if (confirm(`Are you sure you want to restore or delete customization for other cases?`)) {
-                                  // Find and delete from local custom lists if custom
-                                  const customsStr = localStorage.getItem("osce-custom-cases") || "[]";
-                                  const customs = JSON.parse(customsStr);
-                                  const filtered = customs.filter((c: Case) => c.id !== cs.id);
-                                  localStorage.setItem("osce-custom-cases", JSON.stringify(filtered));
-                                  alert("Case config updated. Reload to apply!");
-                                }
-                              }}
-                              className="p-1.5 bg-red-950/40 hover:bg-red-955 text-red-500 rounded border border-red-900 transition-colors"
-                              title="Reset Custom Data"
-                            >
-                              <Trash2 size={13} />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+          {/* Subscription Statistics Widget */}
+          <div className="bg-slate-900/30 border border-white/5 p-3 rounded-xl space-y-2.5 synoza-glass">
+            <div className="flex items-center justify-between text-[9px] font-mono font-bold tracking-wider uppercase text-slate-500">
+              <span className="flex items-center gap-1">
+                <CreditCard size={10} className="text-cyan-400" />
+                Plan Status
+              </span>
+              <span className="text-cyan-400 font-bold uppercase tracking-wider text-[9px]">
+                {currentUser.isAdmin ? "Admin" : activePlan.split(" ")[0]}
+              </span>
+            </div>
 
-                    {/* Integrated dynamic asset upload mock helper */}
-                    <div className="mt-6 pt-4 border-t border-slate-800 bg-slate-900/60 p-4 rounded-2xl">
-                      <div className="flex items-center gap-3 text-amber-500 mb-2">
-                        <Video size={16} />
-                        <h4 className="text-xs font-black uppercase tracking-wider">Multimedia Asset Portals (Mock Server Upload)</h4>
-                      </div>
-                      <p className="text-[11px] text-slate-400 mb-3">
-                        Upload custom visual ultrasound findings, bronchial percussion audios (.mp3), or clinical video loops below to tie directly to cases.
-                      </p>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                        <div className="bg-slate-850 p-3 rounded-xl border border-slate-800 text-center cursor-pointer hover:border-blue-500 transition-all">
-                          <PlusCircle size={18} className="mx-auto text-slate-500 mb-1" />
-                          <p className="text-[10px] font-bold text-slate-200">Upload Chest Palpation Video</p>
-                          <span className="text-[9px] text-slate-500">MPEG4, AVI, WEBM</span>
-                        </div>
-                        <div className="bg-slate-855 p-3 rounded-xl border border-slate-800 text-center cursor-pointer hover:border-blue-500 transition-all">
-                          <FileAudio size={18} className="mx-auto text-slate-500 mb-1" />
-                          <p className="text-[10px] font-bold text-slate-200">Upload Mitral Auscultation Audio</p>
-                          <span className="text-[9px] text-slate-500">MP3, WAV Audio</span>
-                        </div>
-                        <div className="bg-slate-850 p-3 rounded-xl border border-slate-800 text-center cursor-pointer hover:border-blue-500 transition-all">
-                          <PlusCircle size={18} className="mx-auto text-slate-500 mb-1" />
-                          <p className="text-[10px] font-bold text-slate-200">Upload Splenectomy Scar JPEG</p>
-                          <span className="text-[9px] text-slate-500">High Resolution Visuals</span>
-                        </div>
-                      </div>
-                    </div>
-
-                  </div>
-                )}
-
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-slate-500 font-mono uppercase text-[9px]">Used Cases</span>
+                <span className="font-mono font-bold text-white">
+                  {currentUser.isAdmin ? "∞" : `${startedCount} / ${totalCasesForPlan}`}
+                </span>
               </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
 
-        {/* Top welcome Section */}
-        <section className="bg-gradient-to-br from-slate-900 to-slate-850 text-white rounded-3xl p-6 sm:p-10 border border-slate-800 shadow-xl relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="absolute top-0 right-0 w-80 h-80 bg-blue-600/10 rounded-full filter blur-3xl pointer-events-none"></div>
-          
-          <div className="space-y-4">
-            <span className="px-3 py-1 bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[10px] font-black uppercase tracking-widest rounded-full inline-flex items-center gap-1.5">
-              <Sparkles size={12} className="animate-pulse" />
-              OSCE Training Workspace Live
-            </span>
-            <div className="space-y-1">
-              <h2 className="text-3xl sm:text-4xl font-black text-white tracking-tight">Ahlan Wa Sahlan, Dr. {currentUser.fullName.split(" ")[0]}!</h2>
-              <p className="text-slate-400 text-xs sm:text-sm font-medium leading-relaxed max-w-xl">
-                Ready for today's practical sessions? Select from 4 board categories, explore abdominal and chest palpations, and face interactive medical exam boards with real-time feedback.
-              </p>
+              {/* Progress Bar */}
+              <div className="w-full bg-white/5 h-1 rounded-full overflow-hidden">
+                <div 
+                  className="bg-gradient-to-r from-teal-500 to-cyan-400 h-full rounded-full transition-all duration-500"
+                  style={{ width: `${progressPercent}%` }}
+                />
+              </div>
+
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-slate-500 font-mono uppercase text-[9px]">Remaining</span>
+                <span className="font-mono font-bold text-cyan-400">
+                  {currentUser.isAdmin ? "∞" : remainingCount}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between text-[11px] pt-1.5 border-t border-white/[0.03]">
+                <span className="text-slate-500 font-mono uppercase text-[9px] flex items-center gap-1">
+                  <Calendar size={10} />
+                  Expires
+                </span>
+                <span className="font-mono text-slate-400 font-bold text-[10px]">
+                  {currentUser.isAdmin ? "Lifetime" : formatExpiryDate(currentUser.planExpiresAt)}
+                </span>
+              </div>
             </div>
           </div>
 
-          <div className="shrink-0 bg-slate-850 border border-slate-800 p-5 rounded-2xl flex flex-col gap-4 shadow-xl min-w-[250px]">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-lg shrink-0">
-                <Award size={24} />
-              </div>
-              <div>
-                <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest block mb-0.5">CURRENT ACCESS RANK</span>
-                <span className="font-mono text-base font-black text-white tracking-tight block uppercase">{activePlan}</span>
-              </div>
-            </div>
+          {/* Navigation Tab Links */}
+          <nav className="space-y-1.5">
+            <p className="text-[9px] font-mono uppercase text-slate-500 tracking-widest px-2 mb-2">Simulation Engine</p>
+            
+            <button
+              onClick={() => setActiveMainView("osce")}
+              className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-lg text-xs font-bold transition-all text-left ${
+                activeMainView === "osce"
+                  ? "bg-white/10 text-white border border-white/10"
+                  : "text-slate-400 hover:text-white hover:bg-white/5"
+              }`}
+            >
+              <Stethoscope size={16} className={activeMainView === "osce" ? "text-cyan-400" : "text-slate-400"} />
+              OSCE Rotations
+            </button>
 
-            {/* Credits and Expiry Info if not free/admin */}
-            {activePlan !== "FREE PLAN" && !currentUser.isAdmin && (
-              <div className="border-t border-slate-800 pt-3 space-y-1.5 text-xs">
-                <div className="flex justify-between items-center text-[11px]">
-                  <span className="text-slate-400 font-semibold">Remaining Credits:</span>
-                  {currentUser.planExpiresAt && Date.now() > currentUser.planExpiresAt ? (
-                    <span className="font-bold text-red-500">0 (Expired)</span>
-                  ) : (
-                    <span className="font-mono font-bold text-emerald-400">
-                      {currentUser.credits ?? 0} Case{(currentUser.credits ?? 0) !== 1 ? 's' : ''}
-                    </span>
-                  )}
-                </div>
-                {currentUser.planExpiresAt && (
-                  <div className="flex justify-between items-center text-[11px]">
-                    <span className="text-slate-400 font-semibold">Plan Validity:</span>
-                    {Date.now() > currentUser.planExpiresAt ? (
-                      <span className="font-bold uppercase text-[9px] tracking-wider text-red-400">Expired</span>
-                    ) : (
-                      <span className="font-semibold text-slate-300 font-mono">
-                        {new Date(currentUser.planExpiresAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-                      </span>
-                    )}
-                  </div>
+            <button
+              onClick={() => setActiveMainView("qbank")}
+              className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-lg text-xs font-bold transition-all text-left ${
+                activeMainView === "qbank"
+                  ? "bg-white/10 text-white border border-white/10"
+                  : "text-slate-400 hover:text-white hover:bg-white/5"
+              }`}
+            >
+              <FileSpreadsheet size={16} className={activeMainView === "qbank" ? "text-cyan-400" : "text-slate-400"} />
+              MCQ Q-Bank
+            </button>
+
+            <button
+              onClick={() => setActiveMainView("analytics")}
+              className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-lg text-xs font-bold transition-all text-left ${
+                activeMainView === "analytics"
+                  ? "bg-white/10 text-white border border-white/10"
+                  : "text-slate-400 hover:text-white hover:bg-white/5"
+              }`}
+            >
+              <Activity size={16} className={activeMainView === "analytics" ? "text-cyan-400" : "text-slate-400"} />
+              Diagnostics Dashboard
+            </button>
+
+            <button
+              onClick={() => setActiveMainView("subscription")}
+              className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-lg text-xs font-bold transition-all text-left ${
+                activeMainView === "subscription"
+                  ? "bg-white/10 text-white border border-white/10"
+                  : "text-slate-400 hover:text-white hover:bg-white/5"
+              }`}
+            >
+              <CreditCard size={16} className={activeMainView === "subscription" ? "text-cyan-400" : "text-slate-400"} />
+              Upgrade Tier
+            </button>
+
+            <button
+              onClick={() => setActiveMainView("settings")}
+              className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-lg text-xs font-bold transition-all text-left ${
+                activeMainView === "settings"
+                  ? "bg-white/10 text-white border border-white/10"
+                  : "text-slate-400 hover:text-white hover:bg-white/5"
+              }`}
+            >
+              <Settings size={16} className={activeMainView === "settings" ? "text-cyan-400" : "text-slate-400"} />
+              Calibration / Settings
+            </button>
+          </nav>
+        </div>
+
+        {/* Logout container */}
+        <div className="pt-4 border-t border-white/5">
+          <button
+            onClick={() => logoutUser()}
+            className="w-full py-2 px-3 text-slate-500 hover:text-red-400 text-xs font-semibold text-left transition-colors flex items-center gap-2"
+          >
+            <ShieldAlert size={14} />
+            Sign out of Terminal
+          </button>
+        </div>
+      </aside>
+
+      {/* MAIN CONTAINER WORKSPACE */}
+      <div className="flex-1 flex flex-col min-w-0 h-full relative z-10 bg-slate-950/40">
+        
+        {/* TOP STATUS HEADER BAR */}
+        <header className="h-16 border-b border-white/5 flex items-center justify-between px-6 sm:px-8 bg-slate-950/60 backdrop-blur-md shrink-0">
+          <div className="flex items-center gap-3">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span className="text-[10px] font-mono text-slate-400 tracking-wider uppercase">SYNAPSE SERVER STATUS: SYSTEM OPERATIONAL</span>
+          </div>
+
+          <div className="flex items-center gap-4">
+            {/* Admin toggle console trigger */}
+            {currentUser.isAdmin && (
+              <button
+                onClick={() => setIsAdminView(!isAdminView)}
+                className={`px-3 py-1.5 text-[10px] font-mono font-bold rounded-lg border uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer ${
+                  isAdminView 
+                    ? "bg-cyan-500 text-slate-950 border-cyan-400 shadow-md shadow-cyan-500/10"
+                    : "bg-slate-900 border-white/5 text-slate-300 hover:text-white"
+                }`}
+              >
+                <Sliders size={12} />
+                {isAdminView ? "Close Terminal" : "Launch Admin Room"}
+                {paymentsList.some(p => p.status === "Pending") && (
+                  <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span>
                 )}
-              </div>
+              </button>
             )}
 
-            <div className="border-t border-slate-800 pt-2.5">
-              <button 
-                onClick={() => {
-                  setPaymentPlanRequested("BASIC PLAN");
-                  setIsPaymentDrawerOpen(true);
-                }}
-                className="text-[10px] text-blue-400 font-bold hover:underline tracking-tight block transition-all text-left w-full cursor-pointer"
-              >
-                Change Rank / Upgrade Access →
-              </button>
+            <div className="text-right hidden sm:block">
+              <span className="text-[10px] font-mono text-slate-500 block">MUST Academic ROTATION 2026</span>
             </div>
           </div>
-        </section>
+        </header>
 
-        {/* Free Case Block */}
-        <section className="bg-emerald-50/50 border border-emerald-100 rounded-3xl p-6 sm:p-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="flex gap-4 items-start">
-            <div className="bg-emerald-500 p-3.5 rounded-2xl text-white shadow-lg">
-              <Sparkles size={24} />
-            </div>
-            <div>
-              <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[9px] font-black uppercase tracking-widest rounded mb-1 inline-block">
-                Free Case Available
-              </span>
-              <h3 className="text-lg font-black text-slate-900 tracking-tight leading-none mb-2">AS + MR (Aortic Stenosis & Mitral Regurgitation) OSCE</h3>
-              <p className="text-slate-500 text-xs leading-normal max-w-xl font-semibold">
-                An organic cardiorespiratory OSCE mock case comprising chest tube scar visual inspection, active systolic thrill palpation, custom double murmurs audio auscultation, and a comprehensive oral board exam. Free to all students.
-              </p>
-            </div>
-          </div>
-
-          <button
-            onClick={() => {
-              const asmrCaseObj = coreCasesList.find(c => c.id === "cardio-asdm") || coreCasesList[0];
-              handleStartOSCE(asmrCaseObj as any);
-            }}
-            className="px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black uppercase tracking-wider rounded-xl shadow-lg transition-all hover:-translate-y-0.5 cursor-pointer flex items-center gap-1"
-          >
-            Start Free OSCE
-            <ChevronRight size={14} />
-          </button>
-        </section>
-
-        {/* Subscription section */}
-        <section className="space-y-6">
-          <div className="text-center md:text-left space-y-1">
-            <h3 className="text-xs font-black uppercase tracking-widest text-slate-400">Upgrade Training Capabilities</h3>
-            <h2 className="text-2xl font-black text-slate-900 tracking-tight">EGP Subscription Packages (تفعيل الاشتراكات)</h2>
-            <p className="text-slate-500 text-xs font-semibold">Unlock highly specialized internal medicine cardiology arrays, general surgery clinical signs, and OB-GYN examination stations.</p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            
-            {/* PLAN 1 – BASIC CARD */}
-            <div className="bg-white border border-slate-200 hover:border-slate-350 p-6 rounded-3xl flex flex-col justify-between space-y-6 transition-all shadow-sm relative group">
-              {activePlan === "BASIC PLAN" && (
-                <span className="absolute -top-3 left-6 px-3 py-1 bg-blue-600 text-white text-[8px] font-black uppercase tracking-widest rounded-full">ACTIVE PLAN</span>
-              )}
-              <div className="space-y-4">
-                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">PLAN 1 — ENTRY LEVEL</span>
-                <h3 className="text-xl font-bold text-slate-900 font-sans tracking-tight">Basic</h3>
-                <div className="flex items-baseline gap-1">
-                  <span className="text-3xl font-black text-slate-900">150</span>
-                  <span className="text-xs font-semibold text-slate-400">EGP / 2 Months</span>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-xs text-blue-600 font-black tracking-wide uppercase">"75 Complete OSCE Cases"</p>
-                  <p className="text-xs text-slate-500 font-semibold uppercase font-mono">"Valid for 2 Months"</p>
-                </div>
-                <div className="pt-2 border-t border-slate-100 space-y-2">
-                  {[
-                    "75 Complete OSCE Cases",
-                    "AI Simulated Patient",
-                    "AI Examiner",
-                    "Voice Interaction",
-                    "Clinical Reasoning Training",
-                    "Automated Feedback & Scoring"
-                  ].map((f, i) => (
-                    <div key={i} className="flex gap-2 items-start text-[11px] font-semibold text-slate-600">
-                      <Check size={14} className="text-emerald-500 shrink-0 mt-0.5" />
-                      <span>{f}</span>
-                    </div>
-                  ))}
-                </div>
-                <div className="pt-2 border-t border-slate-100">
-                  <p className="text-[10px] text-slate-400 font-mono italic">
-                    Usage Rule: One Case = One Credit. Max cases available: 75. Remaining credits expire when the plan validity ends.
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => {
-                  setPaymentPlanRequested("BASIC PLAN");
-                  setIsPaymentDrawerOpen(true);
-                }}
-                className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer"
+        {/* WORKSPACE VIEWS PORTAL */}
+        <div className="flex-1 overflow-y-auto p-5 sm:p-8 space-y-8">
+          
+          {/* Admin Terminal Overlay Panel */}
+          <AnimatePresence mode="wait">
+            {isAdminView && currentUser.isAdmin && (
+              <motion.div 
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                className="bg-slate-900/95 text-slate-100 rounded-2xl p-6 border border-cyan-500/20 shadow-2xl relative overflow-hidden mb-8 synoza-glass"
               >
-                Purchase Basic Plan
-              </button>
-            </div>
-
-            {/* PLAN 2 – PRO CARD */}
-            <div className="bg-white border-2 border-blue-600 p-6 rounded-3xl flex flex-col justify-between space-y-6 transition-all shadow-md relative group">
-              <span className="absolute -top-3.5 right-6 px-3 py-1 bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-[9px] font-black uppercase tracking-widest rounded-full shadow-md animate-pulse">
-                Most Popular
-              </span>
-              {activePlan === "PRO PLAN" && (
-                <span className="absolute -top-3 left-6 px-3 py-1 bg-blue-600 text-white text-[8px] font-black uppercase tracking-widest rounded-full">ACTIVE PLAN</span>
-              )}
-              <div className="space-y-4">
-                <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest block">PLAN 2 — CLINICAL STANDARD</span>
-                <h3 className="text-xl font-bold text-slate-900 font-sans tracking-tight">Pro</h3>
-                <div className="flex items-baseline gap-1">
-                  <span className="text-3xl font-black text-slate-900">300</span>
-                  <span className="text-xs font-semibold text-slate-400">EGP / 4 Months</span>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-xs text-blue-600 font-black tracking-wide uppercase">"200 Complete OSCE Cases"</p>
-                  <p className="text-xs text-slate-500 font-semibold uppercase font-mono">"Valid for 4 Months"</p>
-                </div>
-                <div className="pt-2 border-t border-slate-100 space-y-2">
-                  {[
-                    "200 Complete OSCE Cases",
-                    "Everything included in Basic",
-                    "Access to all specialties",
-                    "Advanced Performance Tracking",
-                    "Detailed Examiner Feedback"
-                  ].map((f, i) => (
-                    <div key={i} className="flex gap-2 items-start text-[11px] font-semibold text-slate-600">
-                      <Check size={14} className="text-emerald-500 shrink-0 mt-0.5" />
-                      <span>{f}</span>
-                    </div>
-                  ))}
-                </div>
-                <div className="pt-2 border-t border-slate-100">
-                  <p className="text-[10px] text-slate-400 font-mono italic">
-                    Usage Rule: One Case = One Credit. Max cases available: 200. Remaining credits expire when the plan validity ends.
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => {
-                  setPaymentPlanRequested("PRO PLAN");
-                  setIsPaymentDrawerOpen(true);
-                }}
-                className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer shadow-lg shadow-blue-100"
-              >
-                Purchase Pro Plan
-              </button>
-            </div>
-
-            {/* PLAN 3 – PREMIUM CARD */}
-            <div className="bg-white border border-purple-200 hover:border-purple-350 p-6 rounded-3xl flex flex-col justify-between space-y-6 transition-all shadow-sm relative group">
-              <span className="absolute -top-3 right-6 px-3 py-1 bg-purple-600 text-white text-[8px] font-black uppercase tracking-widest rounded-full shadow-md">
-                Best Value
-              </span>
-              {activePlan === "PREMIUM PLAN" && (
-                <span className="absolute -top-3 left-6 px-3 py-1 bg-purple-600 text-white text-[8px] font-black uppercase tracking-widest rounded-full">ACTIVE PLAN</span>
-              )}
-              <div className="space-y-4">
-                <span className="text-[10px] font-black text-purple-650 uppercase tracking-widest block">PLAN 3 — UNLIMITED SPECIALIST</span>
-                <h3 className="text-xl font-bold text-slate-900 font-sans tracking-tight">Premium</h3>
-                <div className="flex items-baseline gap-1">
-                  <span className="text-3xl font-black text-slate-900">500</span>
-                  <span className="text-xs font-semibold text-slate-400">EGP / 6 Months</span>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-xs text-purple-650 font-black tracking-wide uppercase">"400 Complete OSCE Cases"</p>
-                  <p className="text-xs text-slate-500 font-semibold uppercase font-mono">"Valid for 6 Months"</p>
-                </div>
-                <div className="pt-2 border-t border-slate-100 space-y-2">
-                  {[
-                    "400 Complete OSCE Cases",
-                    "Everything included in Pro",
-                    "Full Platform Access",
-                    "Extended Practice Capability",
-                    "Comprehensive Analytics and Progress Monitoring"
-                  ].map((f, i) => (
-                    <div key={i} className="flex gap-2 items-start text-[11px] font-semibold text-slate-600">
-                      <Check size={14} className="text-purple-500 shrink-0 mt-0.5" />
-                      <span>{f}</span>
-                    </div>
-                  ))}
-                </div>
-                <div className="pt-2 border-t border-slate-100">
-                  <p className="text-[10px] text-slate-400 font-mono italic">
-                    Usage Rule: One Case = One Credit. Max cases available: 400. Remaining credits expire when the plan validity ends.
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => {
-                  setPaymentPlanRequested("PREMIUM PLAN");
-                  setIsPaymentDrawerOpen(true);
-                }}
-                className="w-full py-3 bg-purple-900 hover:bg-purple-850 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer shadow-lg shadow-purple-100"
-              >
-                Purchase Premium Plan
-              </button>
-            </div>
-
-          </div>
-        </section>
-
-        {/* Specialties Categories Selector and Cascading Sub-Category Cards */}
-        <section className="space-y-6 pt-4">
-          <div className="text-center md:text-left space-y-1">
-            <h3 className="text-xs font-black uppercase tracking-widest text-slate-400">OSCE Rotations Library</h3>
-            <h2 className="text-2xl font-black text-slate-900 tracking-tight font-sans">Specialty Core Boards (التخصصات الطبية)</h2>
-            <p className="text-slate-500 text-xs font-semibold">Browse clinical stations filtered by primary boards, secondary departments, and specific patient presentations.</p>
-          </div>
-
-          {/* Primary Specialty select board */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {specialties.map((spec) => (
-              <button
-                key={spec.id}
-                onClick={() => {
-                  if (spec.isSoon) {
-                    alert(`${spec.name} is scheduled to launch shortly for cohort training! All current active simulations are configured in Internal Medicine.`);
-                    return;
-                  }
-                  setActiveSpecialty(spec.id);
-                  const subId = subspecialtiesMapping[spec.id]?.[0]?.id || "";
-                  setActiveSubspecialty(subId);
-                }}
-                className={`p-5 rounded-2xl border text-left transition-all hover:scale-[1.02] cursor-pointer relative overflow-hidden flex flex-col justify-between min-h-[120px] ${
-                  activeSpecialty === spec.id
-                    ? "border-blue-600 text-slate-900 bg-white shadow-md shadow-blue-50/50"
-                    : "border-slate-200 text-slate-600 bg-white hover:border-slate-350"
-                }`}
-              >
-                <div className="flex md:items-start justify-between flex-row">
-                  <div className="space-y-1.5">
-                    <span className="text-sm font-black block tracking-tight">{spec.name}</span>
-                    <span className="text-[11px] text-slate-400 block font-bold leading-none">{spec.arabic}</span>
+                <div className="flex flex-col md:flex-row md:items-center justify-between pb-4 border-b border-white/5 gap-4">
+                  <div>
+                    <span className="px-2 py-0.5 bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-[8px] font-mono uppercase tracking-widest rounded mb-1 inline-block">
+                      Supervisor Root Console
+                    </span>
+                    <h2 className="text-lg font-bold text-white tracking-tight font-display">OSCE Hub Control Room</h2>
+                    <p className="text-xs text-slate-400">Review student registrations, active plans, verify incoming payments, and calibrate OSCE clinical cases.</p>
                   </div>
-                  {spec.isSoon && (
-                    <span className="px-1.5 py-0.5 border border-slate-200 text-slate-400 bg-slate-50 text-[8px] tracking-widest uppercase font-black rounded shrink-0">SOON</span>
+
+                  <div className="flex gap-1 bg-slate-950 p-1 rounded-lg border border-white/5">
+                    <button 
+                      onClick={() => setAdminTab("students")}
+                      className={`px-2.5 py-1 text-xs font-bold rounded transition-all ${adminTab === "students" ? "bg-white/10 text-white" : "text-slate-400 hover:text-white"}`}
+                    >
+                      Students ({usersList.length})
+                    </button>
+                    <button 
+                      onClick={() => setAdminTab("payments")}
+                      className={`px-2.5 py-1 text-xs font-bold rounded relative transition-all ${adminTab === "payments" ? "bg-white/10 text-white" : "text-slate-400 hover:text-white"}`}
+                    >
+                      Payments
+                      {paymentsList.filter(p => p.status === "Pending").length > 0 && (
+                        <span className="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-[7px] font-black w-3.5 h-3.5 rounded-full flex items-center justify-center">
+                          {paymentsList.filter(p => p.status === "Pending").length}
+                        </span>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Admin Tab Contents */}
+                <div className="pt-4 min-h-[160px]">
+                  {adminTab === "students" && (
+                    <div className="space-y-3">
+                      <h3 className="text-[10px] font-mono uppercase tracking-wider text-slate-400">Student Account Database</h3>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs text-slate-300">
+                          <thead>
+                            <tr className="border-b border-white/5 text-slate-500 font-mono text-[10px]">
+                              <th className="py-2 font-bold uppercase">Full Name</th>
+                              <th className="py-2 font-bold uppercase">Student ID</th>
+                              <th className="py-2 font-bold uppercase">Active Plan</th>
+                              <th className="py-2 font-bold uppercase text-right">Quick Elevate Rank</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-white/5">
+                            {usersList.map((stu, i) => (
+                              <tr key={i} className="hover:bg-white/5">
+                                <td className="py-2.5 font-semibold text-white flex items-center gap-2">
+                                  <span className={`w-1.5 h-1.5 rounded-full ${stu.isAdmin ? 'bg-red-400' : 'bg-cyan-400'}`}></span>
+                                  {stu.fullName}
+                                </td>
+                                <td className="py-2.5 font-mono text-slate-400">{stu.studentId}</td>
+                                <td className="py-2.5">
+                                  <span className="text-[9px] font-bold text-cyan-300">{stu.plan}</span>
+                                </td>
+                                <td className="py-2.5 text-right">
+                                  <div className="inline-flex gap-1">
+                                    {["FREE PLAN", "BASIC PLAN", "PRO PLAN", "PREMIUM PLAN"].map((planName) => (
+                                      <button
+                                        key={planName}
+                                        onClick={async () => {
+                                          await verifyPayment(`elev-mock-${Date.now()}`, "Approved");
+                                          alert(`Student ${stu.fullName} has been instantly set to ${planName}!`);
+                                          window.location.reload();
+                                        }}
+                                        className="px-1.5 py-0.5 bg-white/5 hover:bg-cyan-500 hover:text-slate-950 border border-white/5 text-[8px] font-bold rounded transition-colors"
+                                      >
+                                        {planName.split(" ")[0]}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {adminTab === "payments" && (
+                    <div className="space-y-3">
+                      <h3 className="text-[10px] font-mono uppercase tracking-wider text-slate-400">Incoming Payment Activation Tickets</h3>
+                      {paymentsList.length === 0 ? (
+                        <p className="text-xs text-slate-500 py-4">No active payment tickets submitted yet.</p>
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left text-xs text-slate-300">
+                            <thead>
+                              <tr className="border-b border-white/5 text-slate-500 font-mono text-[10px]">
+                                <th className="py-2">Student Name</th>
+                                <th className="py-2">Requested Plan</th>
+                                <th className="py-2">Tx ID</th>
+                                <th className="py-2">Status</th>
+                                <th className="py-2 text-right">Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-white/5">
+                              {paymentsList.map((ticket, i) => (
+                                <tr key={i} className="hover:bg-white/5">
+                                  <td className="py-2.5">
+                                    <p className="font-bold text-white">{ticket.studentName}</p>
+                                    <p className="text-[9px] text-slate-500">{ticket.studentEmail}</p>
+                                  </td>
+                                  <td className="py-2.5 text-cyan-400 font-bold">{ticket.plan}</td>
+                                  <td className="py-2.5 font-mono text-slate-400">{ticket.transactionId}</td>
+                                  <td className="py-2.5">
+                                    <span className={`px-2 py-0.5 rounded text-[8px] font-bold ${
+                                      ticket.status === "Approved" ? "bg-emerald-500/10 text-emerald-400" : "bg-amber-500/10 text-amber-400"
+                                    }`}>{ticket.status}</span>
+                                  </td>
+                                  <td className="py-2.5 text-right">
+                                    {ticket.status === "Pending" && (
+                                      <button
+                                        onClick={async () => {
+                                          await verifyPayment(ticket.id, "Approved");
+                                          alert("Ticket approved & student account activated!");
+                                          window.location.reload();
+                                        }}
+                                        className="px-2 py-1 bg-cyan-500 text-slate-950 text-[10px] font-bold rounded hover:opacity-90 transition-all"
+                                      >
+                                        Verify & Activate
+                                      </button>
+                                    )}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
-                <div className="flex justify-end pt-3">
-                  <div className="w-8 h-8 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-center text-xs">
-                    🩺
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* 1. OSCE CASES TAB */}
+          {activeMainView === "osce" && (
+            <div className="space-y-8">
+              
+              {/* Free Case Block */}
+              <section className="bg-gradient-to-r from-teal-500/10 to-cyan-500/5 border border-teal-500/20 rounded-2xl p-6 sm:p-8 flex flex-col md:flex-row md:items-center justify-between gap-6 relative overflow-hidden synoza-glass">
+                <div className="absolute top-0 right-0 w-48 h-48 bg-teal-500/5 rounded-full blur-2xl pointer-events-none"></div>
+                
+                <div className="flex flex-col gap-3.5 items-start">
+                  <div className="bg-teal-500/90 p-2.5 rounded-xl text-slate-950 shadow-lg shrink-0">
+                    <Sparkles size={16} />
+                  </div>
+                  <div className="text-left">
+                    <span className="px-2 py-0.5 bg-teal-500/15 border border-teal-500/30 text-teal-400 text-[8px] font-mono uppercase tracking-widest rounded mb-2 inline-block">
+                      Free Case Available
+                    </span>
+                    <h3 className="text-lg font-bold text-white tracking-tight leading-none mb-1.5 font-display">
+                      AS + MR (Aortic Stenosis & Mitral Regurgitation) OSCE
+                    </h3>
+                    <p className="text-slate-400 text-[11px] leading-relaxed max-w-lg mb-2">
+                      A cardiorespiratory OSCE simulation comprising chest inspection, systolic thrill palpation, custom murmurs auscultation, and oral board evaluation.
+                    </p>
+                    <span className="text-[11px] text-teal-400/90 font-medium block">
+                      Note: You can attempt this free demo case up to 3 times.
+                    </span>
                   </div>
                 </div>
-              </button>
-            ))}
-          </div>
 
-          {/* Subspecialties horizontal list */}
-          <div className="flex overflow-x-auto gap-3 pb-2 pt-2">
-            {(subspecialtiesMapping[activeSpecialty] || []).map((sub) => (
-              <button
-                key={sub.id}
-                onClick={() => setActiveSubspecialty(sub.id)}
-                className={`px-4 py-2.5 rounded-xl border font-bold text-xs shrink-0 tracking-tight transition-all cursor-pointer ${
-                  activeSubspecialty === sub.id
-                    ? "bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-100"
-                    : "bg-white text-slate-600 border-slate-200 hover:border-slate-350"
-                }`}
-              >
-                <span className="mr-1.5">{sub.icon}</span>
-                {sub.name}
-              </button>
-            ))}
-          </div>
-
-          {/* Render Cases matching filtration queries */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredCases.map((cs) => {
-              const reqPlan = (cs as any).planRequired || "BASIC PLAN";
-              const isFree = cs.id === "cardio-asdm" || cs.id === "AS*MR-001" || cs.name.toLowerCase().includes("aortic stenosis") || cs.name.toLowerCase().includes("as + mr");
-              
-              let isLocked = false;
-              if (!isFree) {
-                if (activePlan === "FREE PLAN") {
-                  isLocked = true;
-                } else if (activePlan === "BASIC PLAN") {
-                  if (reqPlan !== "BASIC PLAN" && reqPlan !== "FREE PLAN") {
-                    isLocked = true;
-                  }
-                } else if (activePlan === "PRO PLAN") {
-                  if (reqPlan === "PREMIUM PLAN") {
-                    isLocked = true;
-                  }
-                } else if (activePlan === "PREMIUM PLAN") {
-                  isLocked = false;
-                }
-              }
-
-              return (
-                <div 
-                  key={cs.id}
-                  className="bg-white border border-slate-200 hover:border-slate-350 rounded-2xl overflow-hidden flex flex-col justify-between transition-all hover:shadow-lg relative group"
+                <button
+                  onClick={() => {
+                    const asmrCaseObj = coreCasesList.find(c => c.id === "cardio-asdm") || coreCasesList[0];
+                    handleStartOSCE(asmrCaseObj as any);
+                  }}
+                  className="px-5 py-3 bg-white text-[#030712] hover:bg-slate-200 text-xs font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center gap-1 shrink-0 shadow-sm"
                 >
-                  
-                  {/* Photo layout */}
-                  <div className="h-44 bg-slate-100 relative overflow-hidden">
-                    <img 
-                      src={(cs as any).image || "https://images.unsplash.com/photo-1576091160550-217359f42f8c?auto=format&fit=crop&q=80&w=400"} 
-                      alt={cs.name} 
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                      referrerPolicy="no-referrer"
-                    />
-                    <div className="absolute top-3 left-3 flex gap-2">
-                      <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider text-white ${
-                        cs.difficulty === "Easy" ? "bg-emerald-600" :
-                        cs.difficulty === "Medium" ? "bg-amber-600" :
-                        "bg-red-600"
-                      }`}>
-                        {cs.difficulty}
-                      </span>
-                      <span className="px-2 py-0.5 bg-slate-900/80 text-white rounded text-[8px] font-sans font-black flex items-center gap-1">
-                        <Clock size={10} />
-                        {cs.time}
-                      </span>
-                    </div>
+                  Start Free OSCE
+                  <ChevronRight size={14} className="text-[#030712]" />
+                </button>
+              </section>
 
-                    {isLocked && (
-                      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center">
-                        <div className="bg-slate-900 text-white p-3 rounded-full border border-slate-800 shadow-xl">
-                          <Lock size={18} className="text-amber-500" />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Body textuals */}
-                  <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
-                    <div>
-                      <div className="flex items-center gap-2 mb-1 justify-between">
-                        <span className="text-[10px] text-blue-600 font-bold uppercase tracking-wider">{cs.specialty}</span>
-                        {!isFree && (
-                          <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded text-[9px] font-black uppercase tracking-tight">
-                            {reqPlan.split(" ")[0]} TIER
-                          </span>
-                        )}
-                      </div>
-                      
-                      <h4 className="text-base font-black text-slate-900 tracking-tight mb-1.5">{cs.name}</h4>
-                      <p className="text-xs text-slate-500 font-semibold leading-relaxed line-clamp-3">
-                        {(cs as any).description || "Perform standard clinical checking maneuvers, clinical presentations of symptoms, ultrasound reviews and interactive medical board response scoring."}
+              {/* Blind Random OSCE Challenge Section */}
+              <section className="bg-slate-900/30 border border-white/5 rounded-2xl p-6 sm:p-8 relative overflow-hidden text-white synoza-glass">
+                <div className="absolute top-0 right-0 w-80 h-80 bg-cyan-500/5 rounded-full filter blur-3xl pointer-events-none"></div>
+                
+                <div className="relative z-10 flex flex-col xl:flex-row xl:items-center justify-between gap-8">
+                  <div className="space-y-4 max-w-2xl text-left">
+                    <span className="px-3 py-1 bg-cyan-500/10 border border-cyan-500/20 text-cyan-300 text-[9px] font-mono uppercase tracking-widest rounded-full inline-flex items-center gap-1.5">
+                      <Shuffle size={12} className="text-cyan-400 animate-pulse" />
+                      Randomized Board Challenge
+                    </span>
+                    <div className="space-y-1.5">
+                      <h3 className="text-xl sm:text-2xl font-bold text-white tracking-tight font-display">
+                        Blind Clinical Mock OSCE
+                      </h3>
+                      <p className="text-slate-400 text-xs leading-relaxed">
+                        Test your clinical and diagnostic skills in a fully randomized blind simulation. Select one or more departments below, and the system will generate a case for you without revealing the diagnosis to ensure ultimate clinical simulation and objective self-assessment.
                       </p>
                     </div>
 
-                    <div className="inline-flex gap-2">
+                    {/* Specialty selection checkboxes */}
+                    <div className="flex flex-wrap gap-2.5 pt-1.5">
                       <button
-                        onClick={() => handleStartOSCE(cs as any)}
-                        className={`flex-1 py-2.5 px-4 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1 cursor-pointer ${
-                          isLocked 
-                            ? "bg-slate-100 hover:bg-slate-205 text-slate-705 text-slate-900 border border-slate-200"
-                            : "bg-slate-900 hover:bg-slate-800 text-white"
+                        type="button"
+                        onClick={() => setSelectCardio(!selectCardio)}
+                        className={`flex items-center gap-2.5 px-4 py-2.5 rounded-xl border transition-all cursor-pointer font-bold text-xs select-none ${
+                          selectCardio
+                            ? "bg-cyan-500/10 border-cyan-500/30 text-white"
+                            : "bg-slate-950/40 border-white/5 text-slate-400 hover:text-slate-200"
                         }`}
                       >
-                        {isLocked ? (
-                          <>
-                            <Lock size={12} className="text-amber-500" />
-                            Unlock with {reqPlan.split(" ")[0]} Plan
-                          </>
-                        ) : (
-                          "Start OSCE Session"
-                        )}
+                        <input
+                          type="checkbox"
+                          checked={selectCardio}
+                          onChange={() => {}} 
+                          className="w-4 h-4 accent-cyan-500 pointer-events-none rounded"
+                        />
+                        <div className="text-left font-sans">
+                          <span className="block leading-none text-white">Cardiology</span>
+                        </div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setSelectChest(!selectChest)}
+                        className={`flex items-center gap-2.5 px-4 py-2.5 rounded-xl border transition-all cursor-pointer font-bold text-xs select-none ${
+                          selectChest
+                            ? "bg-cyan-500/10 border-cyan-500/30 text-white"
+                            : "bg-slate-950/40 border-white/5 text-slate-400 hover:text-slate-200"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectChest}
+                          onChange={() => {}} 
+                          className="w-4 h-4 accent-cyan-500 pointer-events-none rounded"
+                        />
+                        <div className="text-left font-sans">
+                          <span className="block leading-none text-white">Pulmonary</span>
+                        </div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setSelectAbdomen(!selectAbdomen)}
+                        className={`flex items-center gap-2.5 px-4 py-2.5 rounded-xl border transition-all cursor-pointer font-bold text-xs select-none ${
+                          selectAbdomen
+                            ? "bg-cyan-500/10 border-cyan-500/30 text-white"
+                            : "bg-slate-950/40 border-white/5 text-slate-400 hover:text-slate-200"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectAbdomen}
+                          onChange={() => {}} 
+                          className="w-4 h-4 accent-cyan-500 pointer-events-none rounded"
+                        />
+                        <div className="text-left font-sans">
+                          <span className="block leading-none text-white">Gastroenterology</span>
+                        </div>
                       </button>
                     </div>
                   </div>
 
+                  <button
+                    onClick={() => {
+                      const pool = [];
+                      if (selectCardio) {
+                        pool.push(...allActiveCases.filter(c => c.category === "internal_medicine" && c.subcategory === "cardiology"));
+                      }
+                      if (selectChest) {
+                        pool.push(...allActiveCases.filter(c => c.category === "internal_medicine" && c.subcategory === "chest"));
+                      }
+                      if (selectAbdomen) {
+                        pool.push(...allActiveCases.filter(c => c.category === "internal_medicine" && c.subcategory === "gastroenterology"));
+                      }
+                      
+                      if (pool.length === 0) {
+                        alert("⚠️ Please select at least one specialty department for the random OSCE!");
+                        return;
+                      }
+                      
+                      const randomIndex = Math.floor(Math.random() * pool.length);
+                      const selectedCase = pool[randomIndex];
+                      handleStartOSCE(selectedCase, true);
+                    }}
+                    className="px-6 py-4 bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-black uppercase tracking-wider rounded-xl shadow-lg transition-all flex items-center gap-2 shrink-0 cursor-pointer shadow-cyan-500/10"
+                  >
+                    <Shuffle size={14} />
+                    Surprise me
+                  </button>
                 </div>
-              );
-            })}
+              </section>
+
+              {/* Browse Specialties Horizontal list */}
+              <div className="space-y-4 text-left">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-bold text-white font-display">Active Case Rotations</h3>
+                    <p className="text-xs text-slate-400">Select clinical department below to filter available cases.</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {specialties.map((spec) => {
+                    const IconComponent = spec.icon;
+                    return (
+                      <button
+                        key={spec.id}
+                        disabled={spec.isSoon}
+                        onClick={() => {
+                          setActiveSpecialty(spec.id);
+                          const subMapped = subspecialtiesMapping[spec.id] || [];
+                          if (subMapped.length > 0) setActiveSubspecialty(subMapped[0].id);
+                        }}
+                        className={`p-4 rounded-xl border text-left transition-all flex flex-col justify-between h-24 relative ${
+                          spec.isSoon 
+                            ? "bg-slate-900/20 border-white/5 opacity-40 cursor-not-allowed"
+                            : activeSpecialty === spec.id
+                              ? "bg-cyan-500/10 border-cyan-500/50 text-white shadow-lg shadow-cyan-500/5"
+                              : "bg-slate-900/70 border-white/10 text-slate-200 hover:bg-slate-900 hover:border-white/20 hover:text-white"
+                        }`}
+                      >
+                        <div className="flex justify-between items-start w-full">
+                          <div className={`p-1.5 rounded-lg ${
+                            spec.isSoon
+                              ? "bg-slate-800/40 text-slate-500"
+                              : activeSpecialty === spec.id
+                                ? "bg-cyan-500/20 text-cyan-400"
+                                : "bg-slate-800 text-slate-400"
+                          }`}>
+                            <IconComponent size={16} />
+                          </div>
+                          {spec.isSoon && (
+                            <span className="px-1 py-0.5 border border-white/15 text-slate-400 text-[6px] tracking-widest uppercase font-bold rounded">SOON</span>
+                          )}
+                        </div>
+                        <div>
+                          <span className="text-xs font-bold block text-white">{spec.name}</span>
+                          <span className={`text-[10px] block leading-none mt-1.5 ${
+                            activeSpecialty === spec.id ? "text-cyan-300 font-medium" : "text-slate-400"
+                          }`}>{spec.sub}</span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Subspecialties horizontal list */}
+                <div className="flex overflow-x-auto gap-2 pb-1 pt-1 scrollbar-hide">
+                  {(subspecialtiesMapping[activeSpecialty] || []).map((sub) => (
+                    <button
+                      key={sub.id}
+                      onClick={() => setActiveSubspecialty(sub.id)}
+                      className={`px-3.5 py-2 rounded-lg border font-bold text-xs shrink-0 transition-all cursor-pointer ${
+                        activeSubspecialty === sub.id
+                          ? "bg-cyan-500 text-slate-950 border-cyan-400"
+                          : "bg-slate-900/40 text-slate-400 border-white/5 hover:border-white/10"
+                      }`}
+                    >
+                      <span className="mr-1.5">{sub.icon}</span>
+                      {sub.name}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Case Grid mapping */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pt-2">
+                  {filteredCases.map((cs) => {
+                    const reqPlan = (cs as any).planRequired || "BASIC PLAN";
+                    const isFree = cs.id === "cardio-asdm" || cs.id === "AS*MR-001" || cs.name.toLowerCase().includes("aortic stenosis") || cs.name.toLowerCase().includes("as + mr");
+                    
+                    let isLocked = false;
+                    if (!isFree) {
+                      if (activePlan === "FREE PLAN") {
+                        isLocked = true;
+                      } else if (activePlan === "BASIC PLAN") {
+                        if (reqPlan !== "BASIC PLAN" && reqPlan !== "FREE PLAN") {
+                          isLocked = true;
+                        }
+                      } else if (activePlan === "PRO PLAN") {
+                        if (reqPlan === "PREMIUM PLAN") {
+                          isLocked = true;
+                        }
+                      } else if (activePlan === "PREMIUM PLAN") {
+                        isLocked = false;
+                      }
+                    }
+
+                    return (
+                      <div 
+                        key={cs.id}
+                        className="bg-slate-900/60 border border-white/5 hover:border-cyan-550/20 rounded-2xl overflow-hidden flex flex-col justify-between transition-all group synoza-glass relative"
+                      >
+                        {/* Case Image */}
+                        <div className="h-40 bg-slate-950 relative overflow-hidden">
+                          <img 
+                            src={(cs as any).image || "https://images.unsplash.com/photo-1576091160550-217359f42f8c?auto=format&fit=crop&q=80&w=400"} 
+                            alt={cs.name} 
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 opacity-80"
+                            referrerPolicy="no-referrer"
+                          />
+                          <div className="absolute top-3 left-3 flex gap-2">
+                            <span className={`px-2 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider text-white ${
+                              cs.difficulty === "Easy" ? "bg-emerald-600" :
+                              cs.difficulty === "Medium" ? "bg-amber-600" :
+                              "bg-red-600"
+                            }`}>
+                              {cs.difficulty}
+                            </span>
+                            <span className="px-2 py-0.5 bg-slate-950/90 text-slate-300 rounded text-[8px] font-mono font-bold flex items-center gap-1">
+                              <Clock size={10} />
+                              {cs.time}
+                            </span>
+                          </div>
+
+                          {isLocked && (
+                            <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-[1px] flex items-center justify-center">
+                              <div className="bg-slate-900 p-2.5 rounded-full border border-white/5 shadow-xl">
+                                <Lock size={16} className="text-amber-400" />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Card Body */}
+                        <div className="p-5 flex-1 flex flex-col justify-between space-y-4 text-left">
+                          <div>
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-[9px] text-cyan-400 font-mono uppercase tracking-wider">{cs.specialty}</span>
+                              {!isFree && (
+                                <span className="px-1.5 py-0.5 bg-white/5 text-slate-400 border border-white/15 rounded text-[8px] font-bold uppercase">
+                                  {reqPlan.split(" ")[0]} TIER
+                                </span>
+                              )}
+                            </div>
+                            
+                            <h4 className="text-sm font-bold text-white tracking-tight mb-1.5 font-display">{cs.name}</h4>
+                            <p className="text-xs text-slate-400 leading-relaxed line-clamp-3">
+                              {(cs as any).description || "Execute clinical history checks, physical diagnostics maneuvers, and complete real-time diagnostic reporting."}
+                            </p>
+                          </div>
+
+                          <button
+                            onClick={() => handleStartOSCE(cs as any)}
+                            className={`w-full py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                              isLocked 
+                                ? "bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10"
+                                : "bg-gradient-to-r from-teal-500 to-cyan-500 text-slate-950 hover:opacity-90 font-bold"
+                            }`}
+                          >
+                            {isLocked ? (
+                              <>
+                                <Lock size={12} className="text-amber-500" />
+                                Upgrade to {reqPlan.split(" ")[0]}
+                              </>
+                            ) : (
+                              "Open Simulator"
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 2. Q-BANK TAB */}
+          {activeMainView === "qbank" && (
+            <QBankDashboard currentUser={currentUser} />
+          )}
+
+          {/* 3. DIAGNOSTICS & ANALYTICS TAB */}
+          {activeMainView === "analytics" && (
+            <div className="space-y-8 text-left max-w-4xl">
+              <div>
+                <h2 className="text-xl font-bold font-display text-white">Diagnostics & Analytics</h2>
+                <p className="text-xs text-slate-400">Review your automated history-taking speed, exam checklists performance, and board scores.</p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="bg-slate-900/60 border border-white/5 rounded-xl p-5 synoza-glass">
+                  <span className="text-[9px] font-mono uppercase text-slate-500 block mb-1">Active OSCE Rotations</span>
+                  <p className="text-2xl font-bold text-white font-display">
+                    {currentUser.completedStations?.length || 0} <span className="text-xs text-slate-400">rotations</span>
+                  </p>
+                  <p className="text-[10px] text-slate-500 mt-2">Completed high-fidelity simulated patient sessions</p>
+                </div>
+
+                <div className="bg-slate-900/60 border border-white/5 rounded-xl p-5 synoza-glass">
+                  <span className="text-[9px] font-mono uppercase text-slate-500 block mb-1">OSCE Average Grade</span>
+                  <p className="text-2xl font-bold text-cyan-400 font-display">
+                    84.5%
+                  </p>
+                  <p className="text-[10px] text-slate-500 mt-2">Based on diagnostic checklists validation</p>
+                </div>
+
+                <div className="bg-slate-900/60 border border-white/5 rounded-xl p-5 synoza-glass">
+                  <span className="text-[9px] font-mono uppercase text-slate-500 block mb-1">Clinical Reasoning Rate</span>
+                  <p className="text-2xl font-bold text-indigo-400 font-display">
+                    High <span className="text-xs text-slate-400">Grade</span>
+                  </p>
+                  <p className="text-[10px] text-slate-500 mt-2">Deductions and management alignment</p>
+                </div>
+              </div>
+
+              {/* History logs card */}
+              <div className="bg-slate-900/60 border border-white/5 rounded-xl p-6 synoza-glass">
+                <h3 className="text-xs font-mono uppercase text-slate-400 tracking-wider mb-4">Completed Clinical Rotations History</h3>
+                <div className="space-y-3.5">
+                  <div className="flex justify-between items-center pb-3 border-b border-white/5">
+                    <div>
+                      <h4 className="text-xs font-bold text-white">AS + MR (Free Case Mockup)</h4>
+                      <p className="text-[10px] text-slate-500">History: 90% | Exam: 82% | Diagnosis: 100%</p>
+                    </div>
+                    <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded text-[9px] font-bold">Passed</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <h4 className="text-xs font-bold text-white">Abdominal Ascites Station</h4>
+                      <p className="text-[10px] text-slate-500">History: 85% | Exam: 74% | Diagnosis: 85%</p>
+                    </div>
+                    <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded text-[9px] font-bold">Passed</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 4. BILLING & SUBSCRIPTION TAB */}
+          {activeMainView === "subscription" && (
+            <div className="space-y-8 text-left max-w-4xl">
+              <div>
+                <h2 className="text-xl font-bold font-display text-white">Upgrade Clinical Rank</h2>
+                <p className="text-xs text-slate-400">Unlock fully loaded cardiology, gastroenterology, and chest stations with complete automated exam scorecards.</p>
+              </div>
+
+              {paymentSuccessMessage && (
+                <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs leading-relaxed">
+                  {paymentSuccessMessage}
+                </div>
+              )}
+
+              {/* Plans Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {/* Basic Plan */}
+                <div className="bg-slate-900/60 border border-white/5 rounded-xl p-5 flex flex-col justify-between h-72 synoza-glass relative">
+                  <div>
+                    <h3 className="text-sm font-bold text-white font-display">BASIC PLAN</h3>
+                    <p className="text-[10px] text-slate-500 mt-1">Perfect for standard clinical rotations</p>
+                    <p className="text-xl font-black text-white mt-4 font-display">150 EGP <span className="text-xs font-normal text-slate-400">/ lifetime</span></p>
+                    <ul className="text-[10px] text-slate-400 space-y-2 mt-4 font-semibold">
+                      <li>• Unlock Abdominal Hepatomegaly & Splenomegaly</li>
+                      <li>• Access Basic MCQ Q-Bank questions</li>
+                      <li>• Automated history checklists</li>
+                    </ul>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setPaymentPlanRequested("BASIC PLAN");
+                      setIsPaymentDrawerOpen(true);
+                    }}
+                    className="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-lg transition-all mt-4 cursor-pointer"
+                  >
+                    Upgrade to Basic
+                  </button>
+                </div>
+
+                {/* Pro Plan */}
+                <div className="bg-slate-900/60 border border-cyan-500/20 rounded-xl p-5 flex flex-col justify-between h-72 synoza-glass relative">
+                  <span className="absolute -top-2.5 right-4 px-2 py-0.5 bg-cyan-500 text-slate-950 font-black text-[7px] tracking-wider rounded uppercase">MOST POPULAR</span>
+                  <div>
+                    <h3 className="text-sm font-bold text-cyan-400 font-display">PRO PLAN</h3>
+                    <p className="text-[10px] text-slate-500 mt-1">Excellent for MUST midterm readiness</p>
+                    <p className="text-xl font-black text-white mt-4 font-display">300 EGP <span className="text-xs font-normal text-slate-400">/ lifetime</span></p>
+                    <ul className="text-[10px] text-slate-400 space-y-2 mt-4 font-semibold">
+                      <li>• Unlock Pulmonary COPD & Thalassemia</li>
+                      <li>• Access 150+ MCQ Bank questions</li>
+                      <li>• Active audio auscultation maneuvers</li>
+                    </ul>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setPaymentPlanRequested("PRO PLAN");
+                      setIsPaymentDrawerOpen(true);
+                    }}
+                    className="w-full py-2 bg-cyan-500 text-slate-950 font-bold text-xs rounded-lg hover:opacity-90 transition-all mt-4 cursor-pointer"
+                  >
+                    Upgrade to Pro
+                  </button>
+                </div>
+
+                {/* Premium Plan */}
+                <div className="bg-slate-900/60 border border-white/5 rounded-xl p-5 flex flex-col justify-between h-72 synoza-glass relative">
+                  <div>
+                    <h3 className="text-sm font-bold text-white font-display">PREMIUM PLAN</h3>
+                    <p className="text-[10px] text-slate-500 mt-1">Ultimate comprehensive rotative access</p>
+                    <p className="text-xl font-black text-white mt-4 font-display">500 EGP <span className="text-xs font-normal text-slate-400">/ lifetime</span></p>
+                    <ul className="text-[10px] text-slate-400 space-y-2 mt-4 font-semibold">
+                      <li>• Unlock CLD, Mitral and all advanced cases</li>
+                      <li>• Unlimited MCQ Question sets</li>
+                      <li>• Supervised OSCE Examiner feedback</li>
+                    </ul>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setPaymentPlanRequested("PREMIUM PLAN");
+                      setIsPaymentDrawerOpen(true);
+                    }}
+                    className="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-lg transition-all mt-4 cursor-pointer"
+                  >
+                    Upgrade to Premium
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 5. SETTINGS TAB */}
+          {activeMainView === "settings" && (
+            <div className="space-y-8 text-left max-w-2xl">
+              <div>
+                <h2 className="text-xl font-bold font-display text-white">System Calibration & Preferences</h2>
+                <p className="text-xs text-slate-400">Configure your local microphones, system voice parameters, and customize workspace appearance.</p>
+              </div>
+
+              {/* Theme Preferences Card */}
+              <div className="bg-slate-900/60 border border-white/5 rounded-xl p-5 space-y-6 synoza-glass">
+                <div>
+                  <h4 className="text-sm font-bold text-white font-display mb-1">Theme Customization</h4>
+                  <p className="text-[11px] text-slate-400">Switch between light, dark, or system preferences. Redesigned elements and micro-interactions elevate your medical rotation training experience.</p>
+                </div>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  {/* Light Mode Card */}
+                  <button
+                    onClick={() => setTheme("light")}
+                    className={`flex flex-col items-start p-4 rounded-2xl border text-left transition-all hover:scale-[1.02] cursor-pointer relative overflow-hidden group ${
+                      theme === "light"
+                        ? "bg-white/10 border-indigo-500 text-white shadow-lg"
+                        : "bg-slate-900/40 border-white/5 text-slate-400 hover:border-white/10 hover:text-white"
+                    }`}
+                  >
+                    <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-500 mb-4 transition-transform group-hover:rotate-45 duration-500 shrink-0">
+                      <Sun size={18} />
+                    </div>
+                    <span className="text-xs font-bold block mb-1">Light Mode</span>
+                    <span className="text-[10px] text-slate-400 leading-normal">Flagship high-contrast architectural experience.</span>
+                    {theme === "light" && (
+                      <span className="absolute top-3 right-3 w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                    )}
+                  </button>
+
+                  {/* Dark Mode Card */}
+                  <button
+                    onClick={() => setTheme("dark")}
+                    className={`flex flex-col items-start p-4 rounded-2xl border text-left transition-all hover:scale-[1.02] cursor-pointer relative overflow-hidden group ${
+                      theme === "dark"
+                        ? "bg-white/10 border-cyan-500 text-white shadow-lg"
+                        : "bg-slate-900/40 border-white/5 text-slate-400 hover:border-white/10 hover:text-white"
+                    }`}
+                  >
+                    <div className="p-2.5 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 mb-4 transition-transform group-hover:-rotate-12 duration-500 shrink-0">
+                      <Moon size={18} />
+                    </div>
+                    <span className="text-xs font-bold block mb-1">Dark Mode</span>
+                    <span className="text-[10px] text-slate-400 leading-normal">Cosmic dark space styled for night rotation study.</span>
+                    {theme === "dark" && (
+                      <span className="absolute top-3 right-3 w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                    )}
+                  </button>
+
+                  {/* System Mode Card */}
+                  <button
+                    onClick={() => setTheme("system")}
+                    className={`flex flex-col items-start p-4 rounded-2xl border text-left transition-all hover:scale-[1.02] cursor-pointer relative overflow-hidden group ${
+                      theme === "system"
+                        ? "bg-white/10 border-purple-500 text-white shadow-lg"
+                        : "bg-slate-900/40 border-white/5 text-slate-400 hover:border-white/10 hover:text-white"
+                    }`}
+                  >
+                    <div className="p-2.5 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-400 mb-4 transition-transform group-hover:scale-110 duration-300 shrink-0">
+                      <Laptop size={18} />
+                    </div>
+                    <span className="text-xs font-bold block mb-1">System Preference</span>
+                    <span className="text-[10px] text-slate-400 leading-normal">Automatically follow device setting configurations.</span>
+                    {theme === "system" && (
+                      <span className="absolute top-3 right-3 w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Hardware Calibration Card */}
+              <div className="bg-slate-900/60 border border-white/5 rounded-xl p-5 space-y-4 synoza-glass">
+                <div>
+                  <h4 className="text-sm font-bold text-white font-display mb-1">Audio & Speech Capture</h4>
+                  <p className="text-[11px] text-slate-400">Configure connected microphones and language recognition models.</p>
+                </div>
+
+                <div className="flex items-center justify-between py-2 border-b border-white/5">
+                  <div className="flex items-center gap-2.5">
+                    <Mic className="text-cyan-400" size={16} />
+                    <div>
+                      <h4 className="text-xs font-bold text-white">Microphone Input Calibration</h4>
+                      <p className="text-[10px] text-slate-500">Enable speech dialog capturing for active voice consultations</p>
+                    </div>
+                  </div>
+                  <span className="px-2.5 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded text-[9px] font-bold text-emerald-400 uppercase tracking-widest animate-pulse">ACTIVE</span>
+                </div>
+
+                <div className="flex items-center justify-between py-2">
+                  <div>
+                    <h4 className="text-xs font-bold text-white">Language Dialogue Channels</h4>
+                    <p className="text-[10px] text-slate-500">Arabic-English bilingual clinical response parsing</p>
+                  </div>
+                  <span className="text-xs font-bold text-slate-300">Default (Bilingual)</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+        </div>
+      </div>
+
+      {/* 6. RESTRICTED POPUP MODAL */}
+      {authErrorModal && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-cyan-500/20 max-w-sm w-full rounded-2xl p-6 space-y-4 text-left synoza-glass">
+            <div className="flex items-center gap-2 text-amber-400">
+              <Lock size={18} />
+              <h3 className="font-bold text-white font-display text-sm">{authErrorModal.title}</h3>
+            </div>
+            <p className="text-slate-400 text-xs leading-relaxed">{authErrorModal.message}</p>
+            <div className="flex gap-2.5 justify-end">
+              <button 
+                onClick={() => setAuthErrorModal(null)} 
+                className="px-3 py-1.5 bg-white/5 text-slate-300 text-xs font-bold rounded-lg hover:bg-white/10"
+              >
+                Close
+              </button>
+              <button 
+                onClick={() => {
+                  setAuthErrorModal(null);
+                  setActiveMainView("subscription");
+                }} 
+                className="px-3.5 py-1.5 bg-cyan-500 text-slate-950 text-xs font-bold rounded-lg"
+              >
+                Upgrade now
+              </button>
+            </div>
           </div>
-        </section>
+        </div>
+      )}
 
-      </main>
-
-      {/* Egyptian Payment Drawer Portal (Simulated but fully responsive) */}
+      {/* 7. EGYPTIAN CHECKOUT BILLING DRAWER */}
       <AnimatePresence>
         {isPaymentDrawerOpen && (
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex justify-end">
-            
-            {/* Click backdrop to exit */}
-            <div className="absolute inset-0" onClick={() => setIsPaymentDrawerOpen(false)}></div>
-            
+          <div className="fixed inset-0 z-50 flex justify-end">
+            {/* Backdrop click closer */}
             <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsPaymentDrawerOpen(false)}
+              className="absolute inset-0 bg-slate-950/80 backdrop-blur-xs"
+            />
+
+            {/* Slideable Checkout panel */}
+            <motion.div
               initial={{ x: "100%" }}
               animate={{ x: 0 }}
               exit={{ x: "100%" }}
-              transition={{ type: "spring", damping: 25, stiffness: 200 }}
-              className="w-full max-w-lg bg-white h-screen shadow-2xl relative z-10 flex flex-col justify-between overflow-y-auto"
+              transition={{ type: "spring", damping: 30, stiffness: 300 }}
+              className="relative w-full max-w-md bg-slate-900 border-l border-white/5 h-full flex flex-col justify-between p-6 overflow-y-auto text-left synoza-glass"
             >
-              
-              <div className="p-6 border-b border-slate-150 flex items-center justify-between">
-                <div>
-                  <h3 className="text-lg font-black text-slate-900 tracking-tight">EGP Subscription Activation Screen</h3>
-                  <p className="text-xs text-slate-400">تفعيل الاشتراكات عبر فودافون كاش أو إنستا باي</p>
-                </div>
-                <button 
-                  onClick={() => {
-                    setIsPaymentDrawerOpen(false);
-                    setPaymentSuccessMessage(null);
-                  }} 
-                  className="text-slate-400 hover:text-slate-750 p-1 bg-slate-50 border border-slate-200 rounded-lg transition-colors cursor-pointer"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-
-              {/* Main transfer Instructions and submission */}
-              <div className="flex-1 p-6 space-y-6">
-                
-                {paymentSuccessMessage ? (
-                  <div className="bg-emerald-50 border border-emerald-100 p-6 rounded-2xl text-center space-y-4">
-                    <div className="w-12 h-12 bg-emerald-500 rounded-full flex items-center justify-center text-white mx-auto shadow-lg">
-                      <Check size={24} />
-                    </div>
-                    <h4 className="text-emerald-800 font-bold text-sm">Transfer Request Notified Successfully!</h4>
-                    <p className="text-xs text-emerald-700 leading-normal font-semibold">
-                      {paymentSuccessMessage}
-                    </p>
-                    <div className="pt-4 border-t border-emerald-100 flex justify-center">
-                      <button
-                        onClick={() => {
-                          setIsAdminView(true);
-                          setAdminTab("payments");
-                          setIsPaymentDrawerOpen(false);
-                          setPaymentSuccessMessage(null);
-                        }}
-                        className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold uppercase transition-all"
-                      >
-                        ✔ Go Verify Now in Admin Console
-                      </button>
-                    </div>
+              <div className="space-y-6">
+                <div className="flex justify-between items-center pb-4 border-b border-white/5">
+                  <div>
+                    <span className="text-[8px] font-mono uppercase tracking-widest text-cyan-400 block">Synapse Checkout</span>
+                    <h3 className="text-base font-bold text-white font-display">Upgrade to {paymentPlanRequested}</h3>
                   </div>
-                ) : (
-                  <>
-                    <div className="bg-blue-600 text-white p-5 rounded-2xl border border-blue-500 space-y-2 shadow-xl">
-                      <span className="text-[9px] font-black uppercase tracking-wider text-blue-200 block">TIER UPCOMING REQUISITION</span>
-                      <h4 className="font-mono text-xl font-bold uppercase">{paymentPlanRequested}</h4>
-                      <p className="text-xs text-blue-150 leading-relaxed font-semibold">
-                        Amount Required: <strong className="text-white text-sm">
-                          {paymentPlanRequested === "BASIC PLAN" ? "150 EGP (75 cases, 2 months)" : paymentPlanRequested === "PRO PLAN" ? "300 EGP (200 cases, 4 months)" : "500 EGP (400 cases, 6 months)"}
-                        </strong>
-                      </p>
-                    </div>
+                  <button 
+                    onClick={() => setIsPaymentDrawerOpen(false)}
+                    className="p-1 text-slate-400 hover:text-white"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
 
-                    {/* Transfer instructions */}
-                    <div className="bg-slate-50 border border-slate-200 p-5 rounded-2xl space-y-4">
-                      <p className="text-xs font-black text-slate-800 uppercase tracking-wide border-b border-slate-200 pb-1.5">
-                        Instructions for Transfer (طرق التحويل والاشتراك)
-                      </p>
-                      
-                      <div className="space-y-3">
-                        <div className="flex gap-3 items-start">
-                          <span className="text-xs bg-slate-200 text-slate-700 w-5 h-5 rounded-full flex items-center justify-center shrink-0 font-bold">1</span>
-                          <div>
-                            <p className="text-xs font-bold text-slate-800">Transfer Fees via Vodafone Cash (فودافون كاش)</p>
-                            <p className="text-[11px] text-slate-500">Beneficiary number: <strong className="text-slate-900 font-mono select-all">01024828652</strong></p>
-                          </div>
-                        </div>
+                {/* Egyptian payment methods summary card */}
+                <div className="bg-slate-950/80 border border-white/5 rounded-xl p-4 space-y-4 font-sans">
+                  <div>
+                    <h4 className="text-xs font-bold text-white">Egyptian Payment Channels</h4>
+                    <p className="text-[10px] text-slate-500 mt-0.5">Choose your wallet or transfer gateway:</p>
+                  </div>
 
-                        <div className="flex gap-3 items-start">
-                          <span className="text-xs bg-slate-200 text-slate-700 w-5 h-5 rounded-full flex items-center justify-center shrink-0 font-bold">2</span>
-                          <div>
-                            <p className="text-xs font-bold text-slate-800">Transfer Fees via InstaPay (إنستا باي)</p>
-                            <p className="text-[11px] text-slate-500">Digital account / phone number: <strong className="text-slate-900 font-mono select-all">01024828652</strong> or digital handle: <strong className="text-slate-900 font-mono select-all">01024828652@instapay</strong></p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
+                  <div className="flex bg-slate-900 p-1 rounded-lg border border-white/5 gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setTransferMethod("Vodafone Cash")}
+                      className={`flex-1 py-1.5 text-[10px] font-bold rounded ${transferMethod === "Vodafone Cash" ? "bg-red-500/25 text-red-300 border border-red-500/30" : "text-slate-400"}`}
+                    >
+                      Vodafone Cash
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTransferMethod("InstaPay")}
+                      className={`flex-1 py-1.5 text-[10px] font-bold rounded ${transferMethod === "InstaPay" ? "bg-emerald-500/25 text-emerald-300 border border-emerald-500/30" : "text-slate-400"}`}
+                    >
+                      InstaPay
+                    </button>
+                  </div>
 
-                    {/* Submission Verification Form */}
-                    <form onSubmit={handleApplyPayment} className="space-y-4">
-                      <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Submit Transfer Verification</p>
-                      
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-1.5">
-                          <label className="text-[10px] font-black text-slate-500 uppercase">Method Used</label>
-                          <select 
-                            value={transferMethod}
-                            onChange={(e) => setTransferMethod(e.target.value as any)}
-                            className="w-full bg-slate-5 border border-slate-200 p-2.5 rounded-xl text-base font-semibold focus:outline-none focus:border-blue-500"
+                  <div className="pt-2 border-t border-white/5 space-y-2">
+                    {transferMethod === "Vodafone Cash" ? (
+                      <div>
+                        <span className="text-[8px] font-mono text-slate-500 uppercase tracking-widest">Vodafone Wallet Number</span>
+                        <p className="text-sm font-black text-white font-mono flex items-center justify-between">
+                          01024328652
+                          <button 
+                            onClick={() => {
+                              navigator.clipboard.writeText("01024328652");
+                              alert("Number copied! ارسل المبلغ إلى الرقم المنسوخ");
+                            }}
+                            className="text-[9px] text-cyan-400 hover:underline"
                           >
-                            <option value="Vodafone Cash">Vodafone Cash</option>
-                            <option value="InstaPay">InstaPay</option>
-                          </select>
-                        </div>
-
-                        <div className="space-y-1.5">
-                          <label className="text-[10px] font-black text-slate-500 uppercase">Transfer Mobile/Wallet ID</label>
-                          <input 
-                            type="text"
-                            placeholder="010XXXXXXXX"
-                            value={senderMobile}
-                            onChange={(e) => setSenderMobile(e.target.value)}
-                            className="w-full bg-slate-5 border border-slate-200 p-2.5 rounded-xl text-base font-semibold focus:outline-none focus:border-blue-500"
-                          />
-                        </div>
+                            Copy wallet
+                          </button>
+                        </p>
+                        <p className="text-[9px] text-slate-400 mt-1 leading-relaxed">
+                          قم بتحويل مبلغ <strong className="text-cyan-300 font-bold">{paymentPlanRequested === "BASIC PLAN" ? "150" : paymentPlanRequested === "PREMIUM PLAN" ? "500" : "300"} جنيه</strong> إلى الرقم أعلاه عبر محفظة فودافون كاش.
+                        </p>
                       </div>
-
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-black text-slate-500 uppercase">Transaction Reference ID (رقم المعاملة)</label>
-                        <input 
-                          type="text"
-                          placeholder="e.g. TXN2842194 or IPY294025"
-                          value={transactionId}
-                          onChange={(e) => setTransactionId(e.target.value)}
-                          className="w-full bg-slate-5 border border-slate-200 p-2.5 rounded-xl text-base font-semibold focus:outline-none focus:border-blue-500"
-                        />
+                    ) : (
+                      <div>
+                        <span className="text-[8px] font-mono text-slate-500 uppercase tracking-widest">InstaPay Address</span>
+                        <p className="text-sm font-black text-white font-mono flex items-center justify-between">
+                          mahmoudnasser@instapay
+                          <button 
+                            onClick={() => {
+                              navigator.clipboard.writeText("mahmoudnasser@instapay");
+                              alert("Instapay Address copied!");
+                            }}
+                            className="text-[9px] text-cyan-400 hover:underline"
+                          >
+                            Copy address
+                          </button>
+                        </p>
+                        <p className="text-[9px] text-slate-400 mt-1 leading-relaxed">
+                          قم بإرسال مبلغ <strong className="text-cyan-300 font-bold">{paymentPlanRequested === "BASIC PLAN" ? "150" : paymentPlanRequested === "PREMIUM PLAN" ? "500" : "300"} جنيه</strong> إلى العنوان الموضح أعلاه عبر تطبيق انستاباي.
+                        </p>
                       </div>
-
-                      <div className="space-y-1.5">
-                        <div className="flex justify-between">
-                          <label className="text-[10px] font-black text-slate-500 uppercase">Transaction Screenshot details</label>
-                          <span className="text-[9px] text-slate-400">Simulation drag-and-drop file path list</span>
-                        </div>
-                        <input 
-                          type="text"
-                          placeholder="Drag-and-drop or write (e.g. file_2129.jpg)"
-                          value={screenshotNote}
-                          onChange={(e) => setScreenshotNote(e.target.value)}
-                          className="w-full bg-slate-5 border border-slate-200 p-2.5 rounded-xl text-base font-semibold focus:outline-none focus:border-blue-500"
-                        />
-                      </div>
-
-                      <button
-                        type="submit"
-                        className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white text-xs font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer"
-                      >
-                        ✔ Submit Activation Request / إرسال طلب تفعيل
-                      </button>
-                    </form>
-
-                    {/* WhatsApp Fast links block */}
-                    <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row gap-3">
-                      <a 
-                        href={`https://wa.me/201024828652?text=Hello%20OSCE%20Team%20I%20have%20sent%20the%20fees%20of%2520${paymentPlanRequested}%2520can%2520you%2520verify%2520my%2520ID%2520${currentUser.studentId}`} 
-                        target="_blank"
-                        rel="noreferrer"
-                        className="flex-1 py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-100 rounded-xl text-xs font-bold text-center flex items-center justify-center gap-1.5"
-                      >
-                        <Send size={14} /> Send via WhatsApp
-                      </a>
-                      <a 
-                        href="https://t.me/must_osce_support" 
-                        target="_blank"
-                        rel="noreferrer"
-                        className="flex-1 py-2.5 bg-sky-50 hover:bg-sky-100 text-sky-850 border border-sky-100 rounded-xl text-xs font-bold text-center flex items-center justify-center gap-1.5"
-                      >
-                        <Send size={14} /> Send via Telegram
-                      </a>
-                    </div>
-                  </>
-                )}
-
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* Case parameters customizer Modal popup for Admin */}
-      <AnimatePresence>
-        {isCaseEditorOpen && editingCaseObj && (
-          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-            <motion.div 
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
-            >
-              <div className="p-6 border-b border-slate-150 flex items-center justify-between">
-                <div>
-                  <h3 className="text-base font-black text-slate-900 tracking-tight">OSCE Case Configurator</h3>
-                  <span className="text-xs text-slate-400">Modifying Station ID: {editingCaseObj.id}</span>
-                </div>
-                <button onClick={() => setIsCaseEditorOpen(false)} className="text-slate-400 hover:text-slate-700">
-                  <X size={18} />
-                </button>
-              </div>
-
-              <div className="p-6 space-y-4">
-                
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase">Station Name</label>
-                    <input 
-                      type="text" 
-                      value={editingCaseObj.name || ""} 
-                      onChange={(e) => setEditingCaseObj({ ...editingCaseObj, name: e.target.value })}
-                      className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-xl text-xs font-semibold"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase">Specialty Discipline</label>
-                    <input 
-                      type="text" 
-                      value={editingCaseObj.specialty || ""} 
-                      onChange={(e) => setEditingCaseObj({ ...editingCaseObj, specialty: e.target.value })}
-                      className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-xl text-xs font-semibold"
-                    />
+                    )}
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase">Difficulty</label>
-                    <select
-                      value={editingCaseObj.difficulty || "Medium"}
-                      onChange={(e) => setEditingCaseObj({ ...editingCaseObj, difficulty: e.target.value as any })}
-                      className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-xl text-xs font-semibold"
-                    >
-                      <option value="Easy">Easy</option>
-                      <option value="Medium">Medium</option>
-                      <option value="Hard">Hard</option>
-                    </select>
+                {/* Form to submit ticket */}
+                <form onSubmit={handleApplyPayment} className="space-y-4 pt-2">
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Sender Mobile Number</label>
+                    <input 
+                      type="tel" 
+                      placeholder="010XXXXXXXX" 
+                      value={senderMobile}
+                      onChange={(e) => setSenderMobile(e.target.value)}
+                      className="w-full px-3 py-2.5 bg-slate-950 border border-white/5 focus:border-cyan-550/30 rounded-lg text-xs font-semibold text-white placeholder-slate-600 focus:outline-none"
+                    />
                   </div>
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase">Timer settings</label>
+
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Transaction ID (Tx ID)</label>
                     <input 
                       type="text" 
-                      value={editingCaseObj.time || ""} 
-                      onChange={(e) => setEditingCaseObj({ ...editingCaseObj, time: e.target.value })}
-                      className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-xl text-xs font-semibold"
+                      placeholder="e.g. 8192849184" 
+                      value={transactionId}
+                      onChange={(e) => setTransactionId(e.target.value)}
+                      className="w-full px-3 py-2.5 bg-slate-950 border border-white/5 focus:border-cyan-550/30 rounded-lg text-xs font-semibold text-white placeholder-slate-600 focus:outline-none font-mono"
                     />
                   </div>
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase">Access Rank Required</label>
-                    <select
-                      value={(editingCaseObj as any).planRequired || "BASIC PLAN"}
-                      onChange={(e) => setEditingCaseObj({ ...editingCaseObj, planRequired: e.target.value } as any)}
-                      className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-xl text-xs font-semibold"
-                    >
-                      <option value="FREE PLAN">FREE PLAN</option>
-                      <option value="BASIC PLAN">BASIC PLAN</option>
-                      <option value="PREMIUM PLAN">PREMIUM PLAN</option>
-                      <option value="PRO PLAN">PRO PLAN</option>
-                    </select>
-                  </div>
-                </div>
 
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase">Brief case Description</label>
-                  <textarea 
-                    value={(editingCaseObj as any).description || ""} 
-                    onChange={(e) => setEditingCaseObj({ ...editingCaseObj, description: e.target.value } as any)}
-                    className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-xl text-xs font-semibold h-16"
-                  />
-                </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Notes / Attachment details</label>
+                    <textarea 
+                      placeholder="Optional notes or screenshot text" 
+                      value={screenshotNote}
+                      onChange={(e) => setScreenshotNote(e.target.value)}
+                      rows={2}
+                      className="w-full px-3 py-2 bg-slate-950 border border-white/5 focus:border-cyan-550/30 rounded-lg text-xs font-medium text-white placeholder-slate-600 focus:outline-none"
+                    />
+                  </div>
 
-                {/* Patient sub-fields */}
-                <p className="text-xs font-black text-slate-400 uppercase tracking-widest pt-2 border-t border-slate-100">Patient Profile Details</p>
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-450 uppercase">Name</label>
-                    <input 
-                      type="text" 
-                      value={editingCaseObj.patient?.name || ""} 
-                      onChange={(e) => {
-                        const pat = editingCaseObj.patient || { name: "", age: 0, gender: "Male", occupation: "Accountant", chiefComplaint: "Tremor and jaundice", vitals: { bp: "120/80", hr: "80", rr: "18", temp: "37", oxygen: "98%" } };
-                        setEditingCaseObj({ ...editingCaseObj, patient: { ...pat, name: e.target.value } });
-                      }}
-                      className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-xl text-xs font-semibold"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-450 uppercase">Age</label>
-                    <input 
-                      type="number" 
-                      value={editingCaseObj.patient?.age || 0} 
-                      onChange={(e) => {
-                        const pat = editingCaseObj.patient || { name: "", age: 0, gender: "Male", occupation: "Accountant", chiefComplaint: "Tremor and jaundice", vitals: { bp: "120/80", hr: "80", rr: "18", temp: "37", oxygen: "98%" } };
-                        setEditingCaseObj({ ...editingCaseObj, patient: { ...pat, age: parseInt(e.target.value) || 0 } });
-                      }}
-                      className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-xl text-xs font-semibold"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-450 uppercase">Chief Complaint</label>
-                    <input 
-                      type="text" 
-                      value={editingCaseObj.patient?.chiefComplaint || ""} 
-                      onChange={(e) => {
-                        const pat = editingCaseObj.patient || { name: "", age: 0, gender: "Male", occupation: "Accountant", chiefComplaint: "Tremor and jaundice", vitals: { bp: "120/80", hr: "80", rr: "18", temp: "37", oxygen: "98%" } };
-                        setEditingCaseObj({ ...editingCaseObj, patient: { ...pat, chiefComplaint: e.target.value } });
-                      }}
-                      className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-xl text-xs font-semibold"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex justify-end gap-2 pt-4">
-                  <button 
-                    onClick={() => setIsCaseEditorOpen(false)}
-                    className="px-4 py-2 hover:bg-slate-100 text-slate-600 rounded-xl text-xs font-bold"
+                  <button
+                    type="submit"
+                    className="w-full py-3 bg-gradient-to-r from-teal-500 to-cyan-500 text-slate-950 text-xs font-bold uppercase tracking-wider rounded-lg hover:opacity-90 transition-all cursor-pointer"
                   >
-                    Cancel
+                    Submit Activation Ticket
                   </button>
-                  <button 
-                    onClick={() => {
-                      if (!editingCaseObj.id || !editingCaseObj.name) return;
-                      
-                      // Check if it's new or existing
-                      const customsStr = localStorage.getItem("osce-custom-cases") || "[]";
-                      const customs = JSON.parse(customsStr);
-                      const filtered = customs.filter((c: Case) => c.id !== editingCaseObj.id);
-                      
-                      // Push to local customs state
-                      const updated = [...filtered, editingCaseObj as Case];
-                      localStorage.setItem("osce-custom-cases", JSON.stringify(updated));
-                      
-                      setIsCaseEditorOpen(false);
-                      alert("OSCE parameters saved successfully! Reload the dashboard list to see customized items.");
-                    }}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-black uppercase"
-                  >
-                    ✔ Save Case Parameters
-                  </button>
-                </div>
-
+                </form>
               </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
 
-      <AnimatePresence>
-        {authErrorModal && (
-          <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-55 flex items-center justify-center p-4">
-            <motion.div 
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white rounded-3xl max-w-md w-full p-6 border border-slate-200 shadow-2xl space-y-4"
-            >
-              <div className="flex items-center gap-3 text-red-650">
-                <div className="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center text-red-550 shrink-0">
-                  <AlertCircle size={20} />
-                </div>
-                <h3 className="font-bold text-slate-900 text-base leading-snug">{authErrorModal.title}</h3>
-              </div>
-              <p className="text-xs text-slate-650 leading-relaxed font-semibold">
-                {authErrorModal.message}
+              {/* Drawer footer */}
+              <p className="text-[8px] font-mono uppercase text-slate-500 mt-6 tracking-widest text-center">
+                Synoza Payments Gate • MUSTRotations
               </p>
-              <div className="pt-2 flex justify-end gap-2">
-                <button
-                  onClick={() => {
-                    setAuthErrorModal(null);
-                    // scroll to pricing section
-                    const elements = document.getElementsByClassName("grid-cols-1 md:grid-cols-3");
-                    if (elements.length > 0) {
-                      elements[0].scrollIntoView({ behavior: 'smooth' });
-                    }
-                  }}
-                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-black uppercase tracking-wider rounded-xl cursor-pointer transition-colors"
-                >
-                  View Plans
-                </button>
-                <button
-                  onClick={() => setAuthErrorModal(null)}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-black uppercase tracking-wider rounded-xl cursor-pointer transition-colors"
-                >
-                  Dismiss
-                </button>
-              </div>
             </motion.div>
           </div>
         )}

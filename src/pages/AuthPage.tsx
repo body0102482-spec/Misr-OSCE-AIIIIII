@@ -1,21 +1,22 @@
 import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { 
-  Stethoscope, 
   Mail, 
   Lock, 
   User, 
   Phone, 
   School, 
   BookOpen, 
-  CheckCircle,
   Eye, 
   EyeOff,
   Sparkles,
-  ArrowRight
+  ArrowRight,
+  ShieldCheck,
+  ChevronLeft
 } from "lucide-react";
 import { useStore } from "../store/useStore";
 import { motion } from "motion/react";
+import { OSCELogo } from "../components/OSCELogo";
 
 export const AuthPage: React.FC = () => {
   const navigate = useNavigate();
@@ -115,7 +116,7 @@ export const AuthPage: React.FC = () => {
       return;
     }
 
-    // Mobil Number validation
+    // Mobile Number validation
     if (!/^\d+$/.test(regMobile)) {
       setError("Please key in a valid Egyptian mobile number.");
       return;
@@ -154,216 +155,228 @@ export const AuthPage: React.FC = () => {
   };
 
   return (
-    <div className="h-[100dvh] w-full overflow-y-auto bg-slate-50 flex flex-col items-center py-12 px-6 sm:px-12 font-sans selection:bg-blue-100">
-      <Link to="/" className="flex items-center gap-3 mb-10 group transition-all shrink-0">
-        <div className="bg-blue-600 p-2.5 rounded-xl text-white shadow-lg shadow-blue-200 group-hover:scale-110 transition-transform">
-          <Stethoscope size={24} />
-        </div>
-        <div>
-          <span className="text-xl font-black text-slate-800 tracking-tight block leading-none">OSCE Mentor AI</span>
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Back to Welcome / العودة للبداية</span>
-        </div>
-      </Link>
+    <div className="h-[100dvh] w-full overflow-y-auto bg-slate-950 flex flex-col items-center justify-between py-8 px-6 sm:px-12 font-sans selection:bg-cyan-550/25 selection:text-cyan-200 text-slate-200 relative synoza-grid">
+      
+      {/* Glow Backdrops */}
+      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] bg-cyan-500/10 blur-[100px] rounded-full pointer-events-none z-0" />
+      <div className="absolute bottom-1/4 left-1/3 w-[300px] h-[300px] bg-indigo-500/5 blur-[80px] rounded-full pointer-events-none z-0" />
 
-      <div className="w-full max-w-xl bg-white border border-slate-200 rounded-[2.5rem] shadow-2xl shadow-slate-200/50 p-8 sm:p-12 mb-12">
-        <div className="text-center mb-10">
-          <h2 className="text-3xl font-black text-slate-900 tracking-tight leading-none mb-3">
-            {isLogin ? "Student Portal" : "Student Registration"}
+      {/* Header link */}
+      <div className="w-full max-w-xl flex justify-between items-center relative z-10 shrink-0">
+        <Link to="/" className="text-slate-400 hover:text-white flex items-center gap-1 text-xs font-semibold transition-colors group">
+          <ChevronLeft size={16} className="group-hover:-translate-x-1 transition-transform" />
+          Home page
+        </Link>
+        <Link to="/" className="hover:scale-[1.02] transition-transform">
+          <OSCELogo size="md" variant="white" />
+        </Link>
+      </div>
+
+      {/* Main glass box */}
+      <div className="w-full max-w-xl bg-slate-900/60 border border-white/5 rounded-3xl p-6 sm:p-10 relative z-10 my-8 synoza-glass">
+        
+        {/* Header Text */}
+        <div className="text-center mb-8">
+          <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight leading-none mb-2 font-display">
+            {isLogin ? "Medical Student Portal" : "Simulation Enlistment"}
           </h2>
-          <p className="text-slate-500 text-sm font-semibold">
+          <p className="text-slate-400 text-xs sm:text-sm">
             {isLogin 
-              ? "Sign in to access MUST clinical stations." 
-              : "Register with your credentials to begin training."
+              ? "Access MUST Clinical OSCE Stations & Q-Bank" 
+              : "Register with credentials to launch clinical training."
             }
           </p>
         </div>
 
+        {/* Error / Success Alerts */}
         {error && (
-          <div className={`p-4 rounded-2xl border mb-8 text-xs font-semibold leading-relaxed animate-in fade-in slide-in-from-top-2 ${
+          <div className={`p-4 rounded-xl border border-white/5 mb-6 text-xs font-medium leading-relaxed animate-in fade-in slide-in-from-top-2 flex items-center gap-2 ${
             error.includes("successful") 
-              ? "bg-emerald-50 border-emerald-100 text-emerald-700"
-              : "bg-red-50 border-red-100 text-red-700"
+              ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
+              : "bg-red-500/10 border-red-500/20 text-red-400"
           }`}>
-            {error}
+            <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0" />
+            <p>{error}</p>
           </div>
         )}
 
-        {/* Tab buttons */}
-        <div className="flex border-b border-slate-100 mb-8 gap-8 justify-center">
+        {/* Custom Tab triggers */}
+        <div className="flex bg-slate-950/60 p-1.5 rounded-xl border border-white/5 mb-8 gap-1.5">
           <button
             onClick={() => { setIsLogin(true); setError(null); }}
-            className={`pb-4 font-bold text-sm border-b-2 relative transition-all ${
-              isLogin ? "border-blue-600 text-blue-600" : "border-transparent text-slate-400 hover:text-slate-800"
+            className={`flex-1 py-2.5 rounded-lg text-xs font-bold transition-all ${
+              isLogin ? "bg-white/10 text-white shadow" : "text-slate-400 hover:text-white"
             }`}
           >
             Sign In / تسجيل دخول
           </button>
           <button
             onClick={() => { setIsLogin(false); setError(null); }}
-            className={`pb-4 font-bold text-sm border-b-2 relative transition-all ${
-              !isLogin ? "border-blue-600 text-blue-600" : "border-transparent text-slate-400 hover:text-slate-800"
+            className={`flex-1 py-2.5 rounded-lg text-xs font-bold transition-all ${
+              !isLogin ? "bg-white/10 text-white shadow" : "text-slate-400 hover:text-white"
             }`}
           >
-            Register / إنشاء حساب
+            Create Account / حساب جديد
           </button>
         </div>
 
-        <form onSubmit={isLogin ? handleLoginSubmit : handleRegisterSubmit} className="space-y-6">
+        {/* Form elements */}
+        <form onSubmit={isLogin ? handleLoginSubmit : handleRegisterSubmit} className="space-y-5">
           {isLogin ? (
             // LOGIN FORM
             <>
-              <div className="space-y-2">
-                <label className="text-xs font-black uppercase text-slate-400 tracking-wider">Email Address</label>
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Email Address</label>
                 <div className="relative">
-                  <Mail className="absolute left-4 top-4 text-slate-400" size={20} />
+                  <Mail className="absolute left-4 top-3.5 text-slate-500" size={16} />
                   <input 
                     type="email" 
                     placeholder="student@must.edu.eg" 
                     value={loginEmail}
                     onChange={(e) => setLoginEmail(e.target.value)}
-                    className="w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white text-base transition-all"
+                    className="w-full pl-11 pr-4 py-3 bg-slate-950/40 border border-white/5 focus:border-cyan-550/30 rounded-xl font-medium text-white placeholder-slate-500 focus:outline-none focus:bg-slate-950 text-sm transition-all"
                   />
                 </div>
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <div className="flex justify-between items-center">
-                  <label className="text-xs font-black uppercase text-slate-400 tracking-wider">Password</label>
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Password</label>
                   <button 
                     type="button"
                     onClick={handleForgotPassword}
-                    className="text-xs text-blue-600 font-bold hover:underline"
+                    className="text-[10px] text-cyan-400 font-bold hover:underline"
                   >
                     Forgot Password?
                   </button>
                 </div>
                 <div className="relative">
-                  <Lock className="absolute left-4 top-4 text-slate-400" size={20} />
+                  <Lock className="absolute left-4 top-3.5 text-slate-500" size={16} />
                   <input 
                     type={showPassword ? "text" : "password"} 
                     placeholder="••••••••" 
                     value={loginPassword}
                     onChange={(e) => setLoginPassword(e.target.value)}
-                    className="w-full pl-12 pr-12 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white text-base transition-all"
+                    className="w-full pl-11 pr-11 py-3 bg-slate-950/40 border border-white/5 focus:border-cyan-550/30 rounded-xl font-medium text-white placeholder-slate-500 focus:outline-none focus:bg-slate-950 text-sm transition-all"
                   />
                   <button 
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-4 top-4 text-slate-400 hover:text-slate-600"
+                    className="absolute right-4 top-3.5 text-slate-500 hover:text-slate-300"
                   >
-                    {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
                 </div>
               </div>
 
               <div className="flex items-center justify-between pt-1">
-                <label className="flex items-center gap-3 cursor-pointer select-none">
+                <label className="flex items-center gap-2.5 cursor-pointer select-none">
                   <input 
                     type="checkbox" 
                     checked={rememberMe}
                     onChange={(e) => setRememberMe(e.target.checked)}
-                    className="rounded text-blue-600 focus:ring-blue-500 border-slate-300 w-5 h-5 transition-all"
+                    className="rounded border-white/10 bg-slate-950 text-cyan-500 focus:ring-0 w-4 h-4 transition-all"
                   />
-                  <span className="text-sm font-semibold text-slate-600">Remember Me</span>
+                  <span className="text-xs font-semibold text-slate-400">Remember session credentials</span>
                 </label>
               </div>
             </>
           ) : (
             // REGISTER FORM 
-            <div className="space-y-5 animate-in fade-in slide-in-from-bottom-2">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                <div className="space-y-2">
-                  <label className="text-xs font-black uppercase text-slate-400 tracking-wider">Full Name</label>
+            <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Full Name</label>
                   <div className="relative">
-                    <User className="absolute left-4 top-4 text-slate-400" size={18} />
+                    <User className="absolute left-4 top-3.5 text-slate-500" size={16} />
                     <input 
                       type="text" 
                       placeholder="Mahmoud Ahmed" 
                       value={regFullName}
                       onChange={(e) => setRegFullName(e.target.value)}
-                      className="w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white text-base transition-all"
+                      className="w-full pl-11 pr-4 py-3 bg-slate-950/40 border border-white/5 focus:border-cyan-550/30 rounded-xl font-medium text-white placeholder-slate-500 focus:outline-none focus:bg-slate-950 text-sm transition-all"
                     />
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <label className="text-xs font-black uppercase text-slate-400 tracking-wider">Student ID</label>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Student ID</label>
                   <div className="relative">
-                    <BookOpen className="absolute left-4 top-4 text-slate-400" size={18} />
+                    <BookOpen className="absolute left-4 top-3.5 text-slate-500" size={16} />
                     <input 
                       type="text" 
-                      placeholder="MUST-2024-819" 
+                      placeholder="MUST-2026-819" 
                       value={regStudentId}
                       onChange={(e) => setRegStudentId(e.target.value)}
-                      className="w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white text-base transition-all"
+                      className="w-full pl-11 pr-4 py-3 bg-slate-950/40 border border-white/5 focus:border-cyan-550/30 rounded-xl font-medium text-white placeholder-slate-500 focus:outline-none focus:bg-slate-950 text-sm transition-all"
                     />
                   </div>
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <label className="text-xs font-black uppercase text-slate-400 tracking-wider">University</label>
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Affiliated University</label>
                 <div className="relative">
-                  <School className="absolute left-4 top-4 text-slate-400" size={18} />
+                  <School className="absolute left-4 top-3.5 text-slate-500" size={16} />
                   <input 
                     type="text" 
                     readOnly
                     value={regUniversity}
-                    className="w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-slate-400 cursor-not-allowed text-base"
+                    className="w-full pl-11 pr-4 py-3 bg-slate-950/20 border border-white/5 rounded-xl font-bold text-slate-500 cursor-not-allowed text-sm"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                <div className="space-y-2">
-                  <label className="text-xs font-black uppercase text-slate-400 tracking-wider">Mobile Number</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Mobile Number</label>
                   <div className="relative">
-                    <Phone className="absolute left-4 top-4 text-slate-400" size={18} />
+                    <Phone className="absolute left-4 top-3.5 text-slate-500" size={16} />
                     <input 
                       type="tel" 
                       placeholder="01024328652" 
                       value={regMobile}
                       onChange={(e) => setRegMobile(e.target.value)}
-                      className="w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white text-base transition-all"
+                      className="w-full pl-11 pr-4 py-3 bg-slate-950/40 border border-white/5 focus:border-cyan-550/30 rounded-xl font-medium text-white placeholder-slate-500 focus:outline-none focus:bg-slate-950 text-sm transition-all"
                     />
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <label className="text-xs font-black uppercase text-slate-400 tracking-wider">Email Address</label>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Email Address</label>
                   <div className="relative">
-                    <Mail className="absolute left-4 top-4 text-slate-400" size={18} />
+                    <Mail className="absolute left-4 top-3.5 text-slate-500" size={16} />
                     <input 
                       type="email" 
                       placeholder="name@must.edu.eg" 
                       value={regEmail}
                       onChange={(e) => setRegEmail(e.target.value)}
-                      className="w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white text-base transition-all"
+                      className="w-full pl-11 pr-4 py-3 bg-slate-950/40 border border-white/5 focus:border-cyan-550/30 rounded-xl font-medium text-white placeholder-slate-500 focus:outline-none focus:bg-slate-950 text-sm transition-all"
                     />
                   </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                <div className="space-y-2">
-                  <label className="text-xs font-black uppercase text-slate-400 tracking-wider">Password</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Password</label>
                   <input 
                     type="password" 
                     placeholder="Min. 6 chars" 
                     value={regPassword}
                     onChange={(e) => setRegPassword(e.target.value)}
-                    className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white text-base transition-all"
+                    className="w-full px-4 py-3 bg-slate-950/40 border border-white/5 focus:border-cyan-550/30 rounded-xl font-medium text-white placeholder-slate-500 focus:outline-none focus:bg-slate-950 text-sm transition-all"
                   />
                 </div>
 
-                <div className="space-y-2">
-                  <label className="text-xs font-black uppercase text-slate-400 tracking-wider">Confirm</label>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Confirm Password</label>
                   <input 
                     type="password" 
-                    placeholder="Repeat" 
+                    placeholder="Repeat password" 
                     value={regConfirmPassword}
                     onChange={(e) => setRegConfirmPassword(e.target.value)}
-                    className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white text-base transition-all"
+                    className="w-full px-4 py-3 bg-slate-950/40 border border-white/5 focus:border-cyan-550/30 rounded-xl font-medium text-white placeholder-slate-500 focus:outline-none focus:bg-slate-950 text-sm transition-all"
                   />
                 </div>
               </div>
@@ -373,26 +386,27 @@ export const AuthPage: React.FC = () => {
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full py-5 px-6 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400 text-white rounded-[1.5rem] text-lg font-black flex items-center justify-center gap-3 shadow-2xl shadow-blue-200 transition-all hover:-translate-y-1 active:translate-y-0 cursor-pointer mt-4"
+            className="w-full py-3 px-4 bg-gradient-to-r from-teal-500 to-cyan-500 hover:opacity-90 disabled:bg-slate-800 text-slate-950 rounded-xl text-sm font-bold flex items-center justify-center gap-2 shadow-lg shadow-cyan-500/10 cursor-pointer mt-6"
           >
             {isLoading ? (
               <>
-                <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
-                Processing...
+                <span className="w-4 h-4 border-2 border-slate-950/30 border-t-slate-950 rounded-full animate-spin"></span>
+                Verifying account...
               </>
             ) : (
               <>
-                {isLogin ? "Authenticate Account" : "Submit Registration"}
-                <ArrowRight size={22} />
+                {isLogin ? "Sign In to Terminal" : "Submit Clinical Enlistment"}
+                <ArrowRight size={16} />
               </>
             )}
           </button>
         </form>
       </div>
 
-      <p className="mt-12 text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] text-center max-w-sm">
-        Misr University for Science and Technology <br />
-        OSCE Simulator Engine • v2.0-Academic
+      {/* Footer copyright */}
+      <p className="mt-8 text-slate-500 text-[10px] font-mono uppercase tracking-[0.2em] text-center max-w-sm shrink-0">
+        Synoza Medical Simulation Portal <br />
+        OSCE Diagnostic Engine • MUST ROTATIONS
       </p>
     </div>
   );
